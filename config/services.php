@@ -28,6 +28,15 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Optional OpenID Connect login (see config/login.php).
+    'oidc' => [
+        'base_url' => env('AUTH_OIDC_ISSUER'),
+        'client_id' => env('AUTH_OIDC_CLIENT_ID'),
+        'client_secret' => env('AUTH_OIDC_CLIENT_SECRET'),
+        'redirect' => env('AUTH_OIDC_REDIRECT_URI'),
+        'verify_jwt' => true,
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
