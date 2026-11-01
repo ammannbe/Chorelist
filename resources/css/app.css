@@ -1,0 +1,139 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+/* Dark mode: class "dark" on <html> (resources/js/prefs.js applyTheme). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* No pull-to-refresh (Chrome on Android): dragging a row downwards at the top would reload
+   the page. The app syncs by itself. */
+html,
+body {
+    overscroll-behavior-y: none;
+}
+
+/*
+ * Dark mode without dark: variants everywhere: the neutral palette and white are inverted, the
+ * light tints of the accent colours become dark tints. Text on coloured buttons stays white
+ * (.text-white keeps its own value).
+ */
+.dark {
+    color-scheme: dark;
+    --color-white: #1c1917;
+    --color-stone-50: #0c0a09;
+    --color-stone-100: #292524;
+    --color-stone-200: #44403c;
+    --color-stone-300: #57534e;
+    --color-stone-400: #78716c;
+    --color-stone-500: #a8a29e;
+    --color-stone-600: #d6d3d1;
+    --color-stone-700: #e7e5e4;
+    --color-stone-800: #f5f5f4;
+    --color-stone-900: #fafaf9;
+    --color-sky-50: #082f49;
+    --color-sky-100: #0c4a6e;
+    --color-sky-200: #075985;
+    --color-sky-800: #bae6fd;
+    --color-sky-900: #e0f2fe;
+    --color-amber-50: #451a03;
+    --color-amber-700: #fbbf24;
+    --color-amber-900: #fef3c7;
+    --color-red-100: #450a0a;
+    --color-red-700: #f87171;
+    --color-red-800: #fecaca;
+    --color-emerald-700: #34d399;
+    --color-green-100: #052e16;
+    --color-green-800: #bbf7d0;
+}
+
+.dark .text-white,
+.dark .button,
+.dark .tab-active,
+.dark .filter-chip-active,
+.dark .bg-stone-900 {
+    --color-white: #fff;
+}
+
+.dark .bg-stone-900 {
+    background-color: #292524;
+    color: #fafaf9;
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* Links to server pages are unavailable offline. */
+.is-offline a[data-online] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@layer components {
+    .field {
+        @apply rounded-lg border border-stone-300 bg-white px-3 py-2 text-base focus:border-sky-600 focus:outline-none;
+    }
+
+    .label {
+        @apply mb-1 block text-sm font-medium text-stone-600;
+    }
+
+    .button {
+        @apply rounded-lg bg-sky-700 px-4 py-2 font-medium text-white hover:bg-sky-800 disabled:opacity-50;
+    }
+
+    .button-secondary {
+        @apply rounded-lg border border-stone-300 bg-white px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-50;
+    }
+
+    .icon-button {
+        @apply -m-1 grid size-10 shrink-0 place-items-center rounded-full text-stone-700 hover:bg-stone-100;
+    }
+
+    .menu-item {
+        @apply block w-full px-4 py-2 text-left hover:bg-stone-50;
+    }
+
+    .notice {
+        @apply rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900;
+    }
+
+    .check {
+        @apply mx-3 grid size-6 shrink-0 place-items-center rounded-full border-2 border-stone-300 hover:border-sky-600;
+    }
+
+    .tab {
+        @apply flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium text-stone-600 hover:bg-stone-100;
+    }
+
+    .tab-active {
+        @apply bg-sky-700 text-white hover:bg-sky-700;
+    }
+
+    .chip {
+        @apply rounded-full border border-stone-300 bg-white px-3 py-1.5 hover:bg-stone-50;
+    }
+
+    .filter-chip {
+        @apply rounded-full border border-stone-300 bg-white px-3 py-1 text-sm;
+    }
+
+    .filter-chip-active {
+        @apply border-sky-700 bg-sky-700 text-white;
+    }
+
+    .check-done {
+        @apply border-sky-600 bg-sky-600 text-white;
+    }
+
+    /* Scrolls inside when the window is too low (suggestion lists then scroll with the content). */
+    .dialog {
+        @apply m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl p-5 shadow-xl backdrop:bg-stone-900/40;
+    }
+}

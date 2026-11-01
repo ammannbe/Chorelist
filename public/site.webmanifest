@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Chorelist",
+  "short_name": "Chorelist",
+  "description": "Ämtli in WG und Familie, offline und geteilt",
+  "lang": "de-CH",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0369a1",
+  "theme_color": "#0369a1",
+  "icons": [
+    {
+      "src": "/web-app-manifest-192x192.png?v=e31d928e",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png?v=e31d928e",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
