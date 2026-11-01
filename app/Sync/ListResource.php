@@ -169,7 +169,7 @@ class ListResource extends SyncResource
             'name' => $doc['name'],
             'icon' => $doc['icon'] ?? null,
             'ranking_enabled' => (bool) ($doc['ranking_enabled'] ?? true),
-            'ranking_period' => $doc['ranking_period'] ?? 'month',
+            'ranking_period' => $doc['ranking_period'] ?? 'all',
         ];
     }
 

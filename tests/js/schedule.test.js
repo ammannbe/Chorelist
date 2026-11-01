@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixtures from '../fixtures/schedule.json';
-import { describeSchedule, fromSchedule, missed, occurrenceId, occurrences, taskState, toSchedule, upcoming } from '../../resources/js/schedule.js';
+import { describeSchedule, formatDate, fromSchedule, missed, occurrenceId, occurrences, taskState, toSchedule, upcoming } from '../../resources/js/schedule.js';
 
 // Same cases as tests/Unit/ScheduleTest.php: client and server must agree.
 describe('taskState', () => {
@@ -63,5 +63,13 @@ describe('schedule form', () => {
         expect(describeSchedule({ mode: 'fixed', rrule: 'FREQ=MONTHLY;BYDAY=4MO' }, t, 'en')).toBe('Every month on the fourth Monday');
         expect(describeSchedule({ mode: 'fixed', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH' }, t, 'en')).toBe('Every :n weeks on Monday, Thursday'.replace(':n', 2));
         expect(describeSchedule({ mode: 'on_demand' }, t, 'en')).toBe('When needed');
+    });
+});
+
+describe('formatDate', () => {
+    it('drops abbreviation dots and the comma of short names', () => {
+        expect(formatDate('2026-10-14', 'de_CH')).toBe('Mi 14. Okt');
+        expect(formatDate('2026-05-06', 'de_CH')).toBe('Mi 6. Mai');
+        expect(formatDate('2026-10-14', 'de_CH', { weekday: 'long', day: 'numeric', month: 'long' })).toBe('Mittwoch, 14. Oktober');
     });
 });

@@ -256,7 +256,16 @@ export function nthLabel(n, t) {
 export function formatDate(date, locale, options = { weekday: 'short', day: 'numeric', month: 'short' }) {
     if (!date) return '';
 
-    return new Intl.DateTimeFormat(locale.replace('_', '-'), { ...options, timeZone: 'UTC' }).format(toDate(date));
+    // Short names without abbreviation dots or comma: "Mi 14. Okt" instead of "Mi., 14. Okt.".
+    return new Intl.DateTimeFormat(locale.replace('_', '-'), { ...options, timeZone: 'UTC' })
+        .formatToParts(toDate(date))
+        .map(({ type, value }) => {
+            if ((type === 'weekday' && options.weekday === 'short') || (type === 'month' && options.month === 'short')) return value.replace(/\.$/, '');
+            if (type === 'literal' && options.weekday === 'short') return value.replace(',', '');
+
+            return value;
+        })
+        .join('');
 }
 
 // ---------------------------------------------------------------- internals

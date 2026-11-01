@@ -3,22 +3,7 @@
     <template x-if="form">
         <form @submit.prevent="saveForm()" class="space-y-5">
             <div class="flex gap-2">
-                {{-- Emoji: pick one or type any --}}
-                <div class="relative" x-data="{ open: false }" @click.outside="open = false">
-                    <button type="button" class="field grid size-[2.625rem] place-items-center p-0 text-xl" @click="open = !open" :aria-label="$t('Icon')" :aria-expanded="open"
-                        x-text="form.icon || '＋'"></button>
-                    <div x-show="open" x-transition class="absolute top-12 left-0 z-20 w-72 rounded-lg border border-stone-200 bg-white p-2 shadow-lg">
-                        <div class="grid grid-cols-8 gap-1">
-                            <template x-for="icon in icons" :key="icon">
-                                <button type="button" class="grid size-8 place-items-center rounded text-xl hover:bg-stone-100" @click="form.icon = icon; open = false" x-text="icon"></button>
-                            </template>
-                        </div>
-                        <div class="mt-2 flex items-center gap-2">
-                            <input x-model="form.icon" maxlength="16" class="field w-20 py-1 text-center" :aria-label="$t('Own emoji')" :placeholder="$t('Emoji')">
-                            <button type="button" class="text-sm underline" @click="form.icon = ''; open = false" x-text="$t('None')"></button>
-                        </div>
-                    </div>
-                </div>
+                <x-icon-picker model="form.icon" />
                 <input x-model="form.title" class="field min-w-0 flex-1" required maxlength="255" :placeholder="$t('Title, e.g. Clean the bathroom')" :aria-label="$t('Title')">
             </div>
 
@@ -31,13 +16,17 @@
                         </template>
                     </select>
                 </label>
-                <label class="block">
-                    <span class="label" x-text="$t('Category (optional)')"></span>
-                    <input x-model="form.category" class="field w-full" maxlength="100" list="categories" :placeholder="$t('e.g. Kitchen')">
-                    <datalist id="categories">
-                        <template x-for="category in categories" :key="category"><option :value="category"></option></template>
-                    </datalist>
-                </label>
+                {{-- Category with suggestions: the ones already used in the same list --}}
+                <div class="relative" x-data="{ open: false }" @click.outside="open = false" @focusin="open = true" @keydown.escape="open = false">
+                    <label for="task-category" class="label" x-text="$t('Category (optional)')"></label>
+                    <input id="task-category" x-model="form.category" class="field w-full" maxlength="100" autocomplete="off" :placeholder="$t('e.g. Kitchen')"
+                        @input="open = true" :aria-expanded="open && categories.length > 0">
+                    <ul x-show="open && categories.length" x-transition class="absolute top-full right-0 left-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg">
+                        <template x-for="category in categories" :key="category">
+                            <li><button type="button" class="block w-full px-3 py-2 text-left hover:bg-stone-100" @click="form.category = category; open = false" x-text="category"></button></li>
+                        </template>
+                    </ul>
+                </div>
             </div>
 
             <fieldset>
@@ -146,12 +135,13 @@
             <fieldset x-show="form.repeat !== 'on_demand'">
                 <legend class="label" x-text="$t('Remind me')"></legend>
                 <div class="flex flex-wrap gap-1.5">
+                    {{-- Days before the (last) due day; with a window its first day replaces the chip of the same day. --}}
                     <template x-for="option in [
-                        { days: 0, label: $t('On the due date') },
-                        { days: 1, label: $t('1 day before') },
-                        { days: 2, label: $t('2 days before') },
-                        { days: 7, label: $t('1 week before') },
-                        ...(Number(form.window_days) > 0 && ![1, 2, 7].includes(Number(form.window_days)) ? [{ days: Number(form.window_days), label: $t('On the first day') }] : []),
+                        ...[{ days: 1, label: $t('1 day before') }, { days: 2, label: $t('2 days before') }, { days: 7, label: $t('1 week before') }]
+                            .filter((each) => each.days !== Number(form.window_days)),
+                        ...(Number(form.window_days) > 0
+                            ? [{ days: Number(form.window_days), label: $t('On the first due day') }, { days: 0, label: $t('On the last due day') }]
+                            : [{ days: 0, label: $t('On the due date') }]),
                     ]" :key="option.days">
                         <button type="button" class="filter-chip" :class="form.reminders.includes(option.days) && 'filter-chip-active'"
                             :aria-pressed="form.reminders.includes(option.days)" @click="toggleReminder(option.days)" x-text="option.label"></button>

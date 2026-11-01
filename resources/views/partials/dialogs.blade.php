@@ -7,7 +7,7 @@
                 <template x-if="dialogList.is_owner !== false">
                     <div class="space-y-4">
                         <div class="flex gap-2">
-                            <input x-model="listDialog.icon" class="field w-14 text-center text-xl" maxlength="16" :placeholder="'📋'" :aria-label="$t('Icon')">
+                            <x-icon-picker model="listDialog.icon" />
                             <input x-model="listDialog.name" class="field min-w-0 flex-1" required maxlength="255" :aria-label="$t('Name')">
                         </div>
                         <label class="flex items-center gap-3">

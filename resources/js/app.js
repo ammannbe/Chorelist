@@ -185,7 +185,7 @@ Alpine.data('chorelist', () => ({
     askDialog: null,
     absenceForm: { starts_on: '', ends_on: '', note: '' },
     historyFilter: { member: '', task: '', missed: true },
-    statsPeriod: 'month',
+    statsPeriod: 'all',
     categoryFilters: JSON.parse(localStorage.getItem(CATEGORY_FILTER_KEY) ?? '{}'),
     showLater: false,
     showArchived: false,
@@ -213,7 +213,7 @@ Alpine.data('chorelist', () => ({
             this.form = null;
             if (this.route.view === 'new') this.form = emptyForm(id ?? this.lists[0]?.id ?? null, this.today);
             if (this.route.view === 'edit') this.openForm(id);
-            if (this.route.view === 'stats') this.statsPeriod = this.listById(id)?.ranking_period ?? 'month';
+            if (this.route.view === 'stats') this.statsPeriod = this.listById(id)?.ranking_period ?? 'all';
             if (this.route.view === 'history') this.historyFilter = { member: '', task: '', missed: true };
             window.scrollTo(0, 0);
         };
@@ -494,7 +494,7 @@ Alpine.data('chorelist', () => ({
             name,
             icon: null,
             ranking_enabled: true,
-            ranking_period: 'month',
+            ranking_period: 'all',
             owner_email: user?.email ?? null,
             is_owner: true,
             members: user ? [{ email: user.email, name: user.name ?? null }] : [],
@@ -652,8 +652,13 @@ Alpine.data('chorelist', () => ({
             return [];
         }
     },
+    /** Categories already used in the form's list, matching what was typed (form suggestions). */
     get categories() {
-        return [...new Set(this.visibleTasks.map((task) => task.category).filter(Boolean))].sort();
+        if (!this.form) return [];
+        const typed = (this.form.category ?? '').trim().toLowerCase();
+        const used = this.visibleTasks.filter((task) => task.task_list_id === this.form.task_list_id && task.category).map((task) => task.category);
+
+        return [...new Set(used)].filter((category) => category.toLowerCase().includes(typed) && category !== this.form.category).sort();
     },
     toggleWeekday(day) {
         this.form.weekdays = this.form.weekdays.includes(day) ? this.form.weekdays.filter((each) => each !== day) : [...this.form.weekdays, day];
