@@ -11,6 +11,7 @@ use App\Notifications\TaskReminder;
 use App\Notifications\WeeklySummary;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -77,6 +78,17 @@ class ReminderTest extends TestCase
         Notification::assertNothingSent();
     }
 
+    public function test_reminder_times_late_in_the_evening_are_reached(): void
+    {
+        $this->task(['reminders' => [1], 'rrule' => 'FREQ=WEEKLY;BYDAY=TH']);
+        $this->user->forceFill(['preferences' => [...$this->user->preferences, 'reminder_time' => '23:58']])->save();
+        Carbon::setTestNow(Carbon::parse('2026-11-04 23:55', 'Europe/Zurich'));
+
+        $this->artisan('reminders:send');
+
+        Notification::assertSentToTimes($this->user, TaskReminder::class, 1);
+    }
+
     public function test_overdue_tasks_are_reported_once_per_occurrence(): void
     {
         // Monday was 2 November.
@@ -90,6 +102,39 @@ class ReminderTest extends TestCase
         $completion->task()->associate($task);
         $completion->task_list_id = $this->list->id;
         $completion->save();
+        $this->artisan('reminders:send');
+
+        Notification::assertSentToTimes($this->user, TaskReminder::class, 1);
+    }
+
+    public function test_postponed_occurrences_are_reminded_again(): void
+    {
+        $task = $this->task(['rrule' => 'FREQ=WEEKLY;BYDAY=MO', 'reminders' => [0]]);
+        $this->artisan('reminders:send');
+        Notification::assertSentToTimes($this->user, TaskReminder::class, 1);
+
+        // Postponed to Friday: due that day again, then overdue again.
+        $completion = new Completion(['occurrence' => '2026-11-02', 'done_on' => '2026-11-04', 'type' => 'postponed', 'postponed_to' => '2026-11-06', 'points' => 0]);
+        $completion->id = Completion::occurrenceId($task->id, '2026-11-02');
+        $completion->task()->associate($task);
+        $completion->task_list_id = $this->list->id;
+        $completion->save();
+        Carbon::setTestNow(Carbon::parse('2026-11-06 09:00', 'Europe/Zurich'));
+        $this->artisan('reminders:send');
+        Carbon::setTestNow(Carbon::parse('2026-11-07 09:00', 'Europe/Zurich'));
+        $this->artisan('reminders:send');
+
+        Notification::assertSentToTimes($this->user, TaskReminder::class, 3);
+    }
+
+    public function test_unchanged_users_are_skipped_until_something_changes(): void
+    {
+        $this->artisan('reminders:send');
+        $this->assertNotNull(Cache::get("reminders:{$this->user->id}"));
+
+        // A new task due today is reminded at the next run.
+        Carbon::setTestNow(Carbon::parse('2026-11-04 09:05', 'Europe/Zurich'));
+        $this->task(['rrule' => 'FREQ=WEEKLY;BYDAY=WE', 'starts_on' => '2026-11-04', 'reminders' => [0]]);
         $this->artisan('reminders:send');
 
         Notification::assertSentToTimes($this->user, TaskReminder::class, 1);

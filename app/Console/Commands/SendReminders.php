@@ -16,6 +16,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,7 +48,9 @@ class SendReminders extends Command
     {
         $timezone = $user->timezone ?: config('app.timezone');
         $now = CarbonImmutable::now($timezone);
-        if ($now->format('H:i') < ($user->preferences()['reminder_time'] ?? '08:00')) {
+        // Runs every 5 minutes: 23:58 would never come before the day changes.
+        [$hours, $minutes] = array_map('intval', explode(':', $user->preferences()['reminder_time'] ?? '08:00'));
+        if ($now->format('H:i') < sprintf('%02d:%02d', $hours, $minutes - $minutes % 5)) {
             return 0;
         }
         $today = $now->format('Y-m-d');
@@ -59,6 +62,20 @@ class SendReminders extends Command
         // Deleted lists keep their memberships and tasks, so only lists that still exist.
         $lists = TaskList::whereIn('id', Membership::where('user_id', $user->id)->where('muted', false)->select('task_list_id'))
             ->pluck('id');
+
+        // Runs every few minutes: compute again only on a new day or when something changed.
+        $fingerprint = implode('|', [
+            $today,
+            $user->updated_at?->toJSON(),
+            $lists->sort()->implode(','),
+            Task::withTrashed()->whereIn('task_list_id', $lists)->max('updated_at'),
+            Completion::whereIn('task_list_id', $lists)->max('updated_at'),
+        ]);
+        $cacheKey = "reminders:{$user->id}";
+        if (! $this->option('dry-run') && Cache::get($cacheKey) === $fingerprint) {
+            return 0;
+        }
+
         $tasks = Task::whereIn('task_list_id', $lists)
             ->where('archived', false)
             ->with(['completions', 'taskList'])
@@ -72,6 +89,9 @@ class SendReminders extends Command
 
         if ($now->isMonday()) {
             $sent += $this->send($user, 'w:'.$now->format('o-\WW'), $this->weeklySummary($user, $tasks, $today));
+        }
+        if (! $this->option('dry-run')) {
+            Cache::put($cacheKey, $fingerprint, now()->addDays(2));
         }
 
         return $sent;
@@ -102,13 +122,14 @@ class SendReminders extends Command
         }
 
         if ($state['status'] === 'overdue') {
-            return [["o:{$task->id}:{$state['occurrence']}", new TaskReminder($task, 'overdue', $state)]];
+            // With the due date: a postponed occurrence is reported again.
+            return [["o:{$task->id}:{$state['occurrence']}:{$state['due']}", new TaskReminder($task, 'overdue', $state)]];
         }
 
         $daysLeft = $this->days($today, $state['due']);
         foreach ($task->reminders ?? [] as $offset) {
             if ($offset === $daysLeft) {
-                $reminders[] = ["r:{$task->id}:{$state['occurrence']}:{$offset}", new TaskReminder($task, 'before', $state, $offset)];
+                $reminders[] = ["r:{$task->id}:{$state['occurrence']}:{$state['due']}:{$offset}", new TaskReminder($task, 'before', $state, $offset)];
             }
         }
 

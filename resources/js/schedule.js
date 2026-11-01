@@ -84,8 +84,12 @@ export function upcoming(task, completions, today, count = 3) {
     return dates;
 }
 
+// Same parts as App\Support\Schedule::RULE_PARTS (the server falls back to weekly otherwise).
+const RULE_PARTS = ['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'BYSETPOS', 'WKST'];
+
 export function validRule(text) {
     if (!text) return false;
+    if (Object.keys(parseRule(text)).some((key) => !RULE_PARTS.includes(key))) return false;
     try {
         const options = RRule.parseString(text);
         return options.freq !== undefined;
@@ -129,7 +133,7 @@ export async function occurrenceId(taskId, occurrence) {
     return uuid5(`${taskId}:${occurrence}`);
 }
 
-// RFC 4122 URL namespace, same as App\Models\Completion::NAMESPACE.
+// RFC 4122 URL namespace, same as Uuid::NAMESPACE_URL in App\Models\Completion::occurrenceId().
 const NAMESPACE = '6ba7b811-9dad-11d1-80b4-00c04fd430c8';
 
 export async function uuid5(name) {

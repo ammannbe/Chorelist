@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Completion;
 use App\Models\Task;
+use Carbon\CarbonImmutable;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Support\Collection;
@@ -140,7 +141,7 @@ class Schedule
      */
     public static function today(?string $timezone = null): string
     {
-        return (new DateTimeImmutable('now', new DateTimeZone($timezone ?: config('app.timezone'))))->format('Y-m-d');
+        return CarbonImmutable::now($timezone ?: config('app.timezone'))->format('Y-m-d');
     }
 
     public static function addDays(string $date, int $days): string

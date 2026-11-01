@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\TaskChanged;
 use App\Notifications\TaskCompleted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -18,6 +19,13 @@ use Tests\TestCase;
 class SyncTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // After the occurrences used below (completions are not done in the future).
+        Carbon::setTestNow('2026-11-10 12:00');
+    }
 
     private function push(User $user, string $collection, array $rows): TestResponse
     {
@@ -193,7 +201,7 @@ class SyncTest extends TestCase
         $user = User::factory()->create();
         $taskId = $this->createTask($user, $this->createList($user));
 
-        $this->complete($user, $taskId, '2026-11-02', ['id' => (string) Str::uuid()])->assertExactJson([]);
+        $this->complete($user, $taskId, '2026-11-02', ['id' => (string) Str::uuid()])->assertJsonPath('0._deleted', true);
         $this->assertSame(0, Completion::count());
 
         // Extra completions have no occurrence and any id.
@@ -215,8 +223,10 @@ class SyncTest extends TestCase
 
     public function test_completions_can_be_undone_and_done_again(): void
     {
-        $user = User::factory()->create();
-        $taskId = $this->createTask($user, $this->createList($user));
+        Notification::fake();
+        [$user, $member, $listId] = $this->shared();
+        $member->forceFill(['preferences' => ['notifications' => ['completed' => ['mail']]]])->save();
+        $taskId = $this->createTask($user, $listId);
         $this->complete($user, $taskId, '2026-11-02');
         $doc = $this->pull($user, 'completions')->json('documents.0');
 
@@ -228,6 +238,8 @@ class SyncTest extends TestCase
         $this->push($user, 'completions', [['assumedMasterState' => $undone, 'newDocumentState' => [...$undone, 'type' => 'done', 'version' => 3]]])
             ->assertExactJson([]);
         $this->assertSame([3, 'done'], [Completion::sole()->points, Completion::sole()->type]);
+        // The others were told once.
+        Notification::assertSentToTimes($member, TaskCompleted::class, 1);
     }
 
     public function test_completions_of_others_cannot_be_taken_over_moved_or_deleted(): void
@@ -259,6 +271,32 @@ class SyncTest extends TestCase
         ]]])->assertExactJson([]);
         $completion->refresh();
         $this->assertSame([$member->id, 'done', '2026-11-02'], [$completion->user_id, $completion->type, $completion->occurrence->format('Y-m-d')]);
+    }
+
+    public function test_implausible_completions_are_not_kept(): void
+    {
+        $user = User::factory()->create();
+        $taskId = $this->createTask($user, $this->createList($user));
+        $extra = fn (array $attributes = []) => $this->complete($user, $taskId, '2026-11-10', ['id' => (string) Str::uuid(), 'occurrence' => null, 'type' => 'extra', ...$attributes]);
+
+        $this->complete($user, $taskId, '2026-11-02', ['done_on' => '2026-11-12'])->assertJsonPath('0._deleted', true);
+        $this->complete($user, $taskId, '2026-11-02', ['type' => 'postponed', 'postponed_to' => '2026-11-01'])->assertJsonPath('0._deleted', true);
+        $this->complete($user, $taskId, '2026-11-02', ['type' => 'postponed', 'postponed_to' => '2028-01-01'])->assertJsonPath('0._deleted', true);
+        $this->push($user, 'completions', [['newDocumentState' => ['id' => Completion::occurrenceId($taskId, '2026-11-09'), 'task_id' => $taskId, 'occurrence' => '2026-11-09', 'done_on' => '2026-11-09', 'type' => 'done', 'version' => 4294967296]]])
+            ->assertUnprocessable();
+        $this->assertSame(0, Completion::count());
+
+        // Three extra completions a day.
+        foreach (range(1, 3) as $i) {
+            $extra()->assertExactJson([]);
+        }
+        $extra()->assertJsonPath('0._deleted', true);
+        $this->assertSame(3, Completion::count());
+
+        // Not for deleted tasks.
+        Task::find($taskId)->delete();
+        $this->complete($user, $taskId, '2026-11-02')->assertJsonPath('0._deleted', true);
+        $this->assertSame(3, Completion::count());
     }
 
     public function test_members_complete_for_other_members_only(): void
@@ -312,6 +350,37 @@ class SyncTest extends TestCase
         $master = $this->pull($member, 'lists')->json('documents.0');
         $this->push($member, 'lists', [['assumedMasterState' => $master, 'newDocumentState' => [...$master, 'muted' => false, 'version' => 3]]])
             ->assertExactJson([]);
+    }
+
+    public function test_personal_list_settings_do_not_conflict_with_the_others(): void
+    {
+        [$owner, $member, $listId] = $this->shared();
+        $ownerDoc = $this->pull($owner, 'lists')->json('documents.0');
+        $memberDoc = $this->pull($member, 'lists')->json('documents.0');
+
+        // The member reorders: the owner's rename based on the old state still goes through.
+        $this->push($member, 'lists', [['assumedMasterState' => $memberDoc, 'newDocumentState' => [...$memberDoc, 'position' => 5, 'version' => $memberDoc['version'] + 1]]])
+            ->assertExactJson([]);
+        $this->push($owner, 'lists', [['assumedMasterState' => $ownerDoc, 'newDocumentState' => [...$ownerDoc, 'name' => 'Daheim', 'version' => $ownerDoc['version'] + 1]]])
+            ->assertExactJson([]);
+        $this->assertSame('Daheim', TaskList::find($listId)->name);
+
+        // The member mutes the list offline, without knowing the rename: muting is kept, the
+        // server sends the renamed list back.
+        $this->push($member, 'lists', [['assumedMasterState' => [...$memberDoc, 'position' => 5, 'version' => $memberDoc['version'] + 1], 'newDocumentState' => [...$memberDoc, 'position' => 5, 'muted' => true, 'version' => $memberDoc['version'] + 2]]])
+            ->assertJsonPath('0.name', 'Daheim')
+            ->assertJsonPath('0.muted', true)
+            ->assertJsonPath('0.position', 5);
+
+        // Versions match what the clients pushed, so the next changes do not conflict.
+        $ownerMaster = $this->pull($owner, 'lists')->json('documents.0');
+        $this->assertSame($ownerDoc['version'] + 1, $ownerMaster['version']);
+        $memberMaster = $this->pull($member, 'lists')->json('documents.0');
+        $this->push($member, 'lists', [['assumedMasterState' => $memberMaster, 'newDocumentState' => [...$memberMaster, 'muted' => false, 'version' => $memberMaster['version'] + 1]]])
+            ->assertExactJson([]);
+        $this->push($owner, 'lists', [['assumedMasterState' => $ownerMaster, 'newDocumentState' => [...$ownerMaster, 'icon' => '🏠', 'position' => 2, 'version' => $ownerMaster['version'] + 1]]])
+            ->assertExactJson([]);
+        $this->assertSame($ownerMaster['version'] + 1, $this->pull($owner, 'lists')->json('documents.0.version'));
     }
 
     public function test_owners_delete_lists_for_everyone_and_members_leave(): void

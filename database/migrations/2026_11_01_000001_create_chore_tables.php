@@ -38,6 +38,8 @@ return new class extends Migration
             // Personal: order of the lists, no notifications of this list.
             $table->double('position')->nullable();
             $table->boolean('muted')->default(false);
+            // Changes of the personal fields; the list document's version is the list's plus this.
+            $table->unsignedInteger('version')->default(0);
             $table->timestamps(precision: 3);
             $table->softDeletes(precision: 3);
             $table->unique(['task_list_id', 'user_id']);
@@ -127,6 +129,9 @@ return new class extends Migration
             $table->id();
             $table->foreignUuid('task_list_id')->constrained()->cascadeOnDelete();
             $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();
+            // Personal invitation (sharing with an existing user), null for links.
+            $table->foreignId('user_id')->nullable()->constrained()->cascadeOnDelete();
+            // SHA-256 of the token in the link.
             $table->string('token', 64)->unique();
             $table->timestamp('expires_at');
             $table->timestamps();

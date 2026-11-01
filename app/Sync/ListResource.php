@@ -13,7 +13,8 @@ use Illuminate\Validation\Rule;
 /**
  * Lists are pulled through the user's memberships, so revoked access and deleted lists both
  * arrive as deleted documents. Name, icon and ranking belong to the owner, order and muting
- * are personal (membership).
+ * are personal (membership). The document's version is the sum of both versions, so personal
+ * changes do not conflict with the changes of the others.
  */
 class ListResource extends SyncResource
 {
@@ -64,7 +65,7 @@ class ListResource extends SyncResource
                 ->sortBy('email')->values()->all(),
             'position' => $model->position,
             'muted' => $model->muted,
-            'version' => $list->version,
+            'version' => $list->version + $model->version,
             'updated_at' => $model->syncTimestamp(),
             '_deleted' => $model->trashed() || $list->trashed(),
         ];
@@ -100,13 +101,17 @@ class ListResource extends SyncResource
             return null;
         }
 
-        if ($list->trashed() || $this->isConflict($list, $assumed)) {
+        if ($list->trashed()) {
             return $this->document($membership->setRelation('taskList', $list), $user);
         }
 
-        if (! empty($new['_deleted'])) {
+        $current = $list->version + $membership->version;
+        $conflict = $assumed === null || (int) ($assumed['version'] ?? 0) !== $current;
+        $target = max((int) ($new['version'] ?? 0), $current + 1);
+
+        if (! empty($new['_deleted']) && ! $conflict) {
             if ($list->isOwnedBy($user)) {
-                $list->version = $this->nextVersion($list, $new);
+                $list->version = $target - $membership->version;
                 $list->save();
                 $list->delete();
                 $list->touchForMembers();
@@ -119,25 +124,38 @@ class ListResource extends SyncResource
             return null;
         }
 
-        $membership->update(['position' => $new['position'] ?? null, 'muted' => (bool) ($new['muted'] ?? false)]);
+        // Order and muting are the user's own, they are kept even when the list changed meanwhile.
+        $personal = ['position' => $new['position'] ?? null, 'muted' => (bool) ($new['muted'] ?? false)];
+        $membership->fill($personal);
+        $personalChanged = $membership->isDirty();
 
-        // Only the owner changes the list itself, members their order and muting. The version
-        // follows the client either way, so its next change does not conflict.
+        // Only the owner changes the list itself, and only without conflict.
         $shared = $this->shared($new);
         $changes = [];
-        if ($list->isOwnedBy($user)) {
+        if ($list->isOwnedBy($user) && ! $conflict) {
             $list->fill($shared);
             $changes = $this->changes($list);
         }
-        $list->version = $this->nextVersion($list, $new);
-        $list->save();
-        $list->touchForMembers();
+
+        // The version follows the client (sum of both), so its next change does not conflict.
+        // Changes of the shared fields always increase the list's part, which the others see.
         if ($changes) {
+            $list->version = max($list->version + 1, $target - $membership->version - ($personalChanged ? 1 : 0));
+            $list->save();
             Activity::record($list, $user, 'list.updated', ['changes' => $changes]);
         }
+        if (! $conflict) {
+            $membership->version = $target - $list->version;
+        } elseif ($personalChanged) {
+            $membership->version++;
+        }
+        $membership->save();
+        if ($changes) {
+            $list->touchForMembers();
+        }
 
-        // A member's change of the shared fields is not kept: send the list back.
-        $kept = $shared == array_intersect_key($list->only(self::SHARED), $shared);
+        // Not everything was kept (conflict, or a member changed the shared fields): send the list back.
+        $kept = ! $conflict && $shared == array_intersect_key($list->only(self::SHARED), $shared);
 
         return $kept ? null : $this->document($membership->fresh()->setRelation('taskList', $list), $user);
     }

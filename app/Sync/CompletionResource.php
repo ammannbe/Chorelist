@@ -8,8 +8,10 @@ use App\Models\Task;
 use App\Models\User;
 use App\Notifications\TaskCompleted;
 use App\Support\Notify;
+use App\Support\Schedule;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 /**
@@ -19,6 +21,8 @@ use Illuminate\Validation\Rule;
  */
 class CompletionResource extends SyncResource
 {
+    private const MAX_EXTRA_PER_DAY = 3;
+
     protected function pullQuery(User $user): Builder
     {
         return Completion::withTrashed()
@@ -85,8 +89,12 @@ class CompletionResource extends SyncResource
         }
 
         if ($completion === null) {
-            if (! empty($new['_deleted']) || ! $this->validId($new)) {
+            if (! empty($new['_deleted'])) {
                 return null;
+            }
+            if ($task->trashed() || ! $this->validId($new) || ! $this->plausible($task, $user, $new)) {
+                // Not kept: the client removes it again.
+                return [...$new, 'task_list_id' => $task->task_list_id, 'points' => 0, 'version' => (int) ($new['version'] ?? 1), '_deleted' => true];
             }
 
             $completion = new Completion;
@@ -104,7 +112,7 @@ class CompletionResource extends SyncResource
 
         // Completions are never deleted (a deleted occurrence id could not be completed again),
         // and the points of another member stay theirs.
-        if (! empty($new['_deleted']) || ! $this->mayChange($completion, $user)) {
+        if (! empty($new['_deleted']) || ! $this->mayChange($completion, $user) || ! $this->plausible($task, $user, $new, $completion)) {
             return $this->document($completion, $user);
         }
 
@@ -160,9 +168,39 @@ class CompletionResource extends SyncResource
                 'previous' => $previous,
             ]), $task->id);
         }
-        if (in_array($new['type'], Completion::SCORED, true)) {
+        // Once per completion, taking it back and completing it again does not notify again.
+        if (in_array($new['type'], Completion::SCORED, true) && Cache::add("completed:{$completion->id}", true, now()->addDays(2))) {
             Notify::members($task->taskList, $user, 'completed', new TaskCompleted($credited, $task, $completion->points));
         }
+    }
+
+    /**
+     * Dates near the occurrence and today, postponing to a later day, a few extra completions a
+     * day (the ranking would mean nothing otherwise).
+     */
+    private function plausible(Task $task, User $user, array $new, ?Completion $completion = null): bool
+    {
+        $today = Schedule::today($user->timezone);
+        $occurrence = $completion?->occurrence?->format('Y-m-d') ?? $new['occurrence'] ?? null;
+        $doneOn = $new['done_on'];
+        if ($doneOn > Schedule::addDays($today, 1) || $doneOn < Schedule::addDays($occurrence ?? $today, -400)) {
+            return false;
+        }
+        if ($new['type'] === 'postponed') {
+            $to = $new['postponed_to'] ?? null;
+            if ($to === null || $occurrence === null || $to <= $occurrence || $to > Schedule::addDays($occurrence, 366)) {
+                return false;
+            }
+        }
+        if ($new['type'] === 'extra' && $completion?->type !== 'extra') {
+            $extras = Completion::where('task_id', $task->id)->where('user_id', $user->id)
+                ->where('type', 'extra')->where('done_on', $doneOn)->count();
+            if ($extras >= self::MAX_EXTRA_PER_DAY) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

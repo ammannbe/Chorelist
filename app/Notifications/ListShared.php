@@ -13,6 +13,7 @@ class ListShared extends ChoreNotification
         private User $sharedBy,
         private TaskList $list,
         private bool $invited,
+        private ?string $acceptPath = null,
     ) {}
 
     public function kind(): string
@@ -22,17 +23,24 @@ class ListShared extends ChoreNotification
 
     public function via(User $notifiable): array
     {
-        // Invited users have no app yet: they get the mail in any case.
-        return $this->invited ? ['mail'] : parent::via($notifiable);
+        // Invited users have no app yet, and invitations must not get lost: mail in any case.
+        return $this->invited || $this->acceptPath ? array_values(array_unique(['mail', ...parent::via($notifiable)])) : parent::via($notifiable);
     }
 
     protected function title(): string
     {
-        return __('Task list shared');
+        return $this->acceptPath ? __('Invitation to a task list') : __('Task list shared');
     }
 
     protected function body(): string
     {
+        if ($this->acceptPath) {
+            return __(':name invites you to the task list ":list".', [
+                'name' => $this->sharedBy->displayName(),
+                'list' => $this->list->name,
+            ]);
+        }
+
         return __(':name shared the task list ":list" with you.', [
             'name' => $this->sharedBy->displayName(),
             'list' => $this->list->name,
@@ -41,11 +49,17 @@ class ListShared extends ChoreNotification
 
     protected function path(): string
     {
-        return "/#/list/{$this->list->id}";
+        return $this->acceptPath ?? "/#/list/{$this->list->id}";
     }
 
     public function toMail(User $notifiable): MailMessage
     {
+        if ($this->acceptPath) {
+            return (new MailMessage)
+                ->subject($this->title())
+                ->line($this->body())
+                ->action(__('Show invitation'), url($this->acceptPath));
+        }
         if (! $this->invited) {
             return parent::toMail($notifiable);
         }

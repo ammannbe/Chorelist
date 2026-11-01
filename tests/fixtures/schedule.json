@@ -62,7 +62,19 @@
           "expect": { "occurrence": null, "due": null, "status": "finished", "last_done": "2026-11-09" } },
         { "name": "on demand", "task": { "mode": "on_demand", "rrule": null, "starts_on": "2026-11-01" },
           "completions": [{ "occurrence": null, "done_on": "2026-11-01", "type": "done" }, { "occurrence": null, "done_on": "2026-11-03", "type": "done" }], "today": "2026-11-05",
-          "expect": { "occurrence": null, "due": null, "status": "on_demand", "last_done": "2026-11-03" } }
+          "expect": { "occurrence": null, "due": null, "status": "on_demand", "last_done": "2026-11-03" } },
+        { "name": "daily with a window longer than the interval", "task": { "mode": "fixed", "rrule": "FREQ=DAILY", "starts_on": "2026-11-02", "window_days": 3 },
+          "completions": [], "today": "2026-11-04",
+          "expect": { "occurrence": "2026-11-04", "due": "2026-11-07", "status": "open" } },
+        { "name": "daily with a window longer than the interval, done", "task": { "mode": "fixed", "rrule": "FREQ=DAILY", "starts_on": "2026-11-02", "window_days": 3 },
+          "completions": [{ "occurrence": "2026-11-04", "done_on": "2026-11-04", "type": "done" }], "today": "2026-11-04",
+          "expect": { "occurrence": "2026-11-05", "due": "2026-11-08", "status": "upcoming" } },
+        { "name": "after completion, paused", "task": { "mode": "after_completion", "rrule": "FREQ=WEEKLY", "starts_on": "2026-11-02", "paused_until": "2026-11-20" },
+          "completions": [{ "occurrence": "2026-11-02", "done_on": "2026-11-03", "type": "done" }], "today": "2026-11-12",
+          "expect": { "occurrence": "2026-11-20", "due": "2026-11-20", "status": "upcoming" } },
+        { "name": "postponed beyond the next occurrence", "task": { "mode": "fixed", "rrule": "FREQ=WEEKLY;BYDAY=MO", "starts_on": "2026-11-02" },
+          "completions": [{ "occurrence": "2026-11-02", "done_on": "2026-11-02", "type": "postponed", "postponed_to": "2026-11-11" }], "today": "2026-11-10",
+          "expect": { "occurrence": "2026-11-09", "due": "2026-11-09", "status": "overdue" } }
     ],
     "occurrences": [
         { "name": "4th Monday of the month", "task": { "mode": "fixed", "rrule": "FREQ=MONTHLY;BYDAY=4MO", "starts_on": "2026-11-01" }, "from": "2026-11-01", "to": "2027-01-31",

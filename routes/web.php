@@ -45,14 +45,15 @@ Route::middleware('auth')->group(function () {
 
     // Invitation links work before the email address is verified (the link proves the invitation).
     Route::get('invite/{token}', [InviteController::class, 'show'])->name('invites.show');
+    Route::post('invite/{token}', [InviteController::class, 'accept'])->middleware('throttle:20,1')->name('invites.accept');
 
     Route::middleware('verified')->group(function () {
         Route::get('sync/{collection}/pull', [SyncController::class, 'pull'])->name('sync.pull');
         Route::post('sync/{collection}/push', [SyncController::class, 'push'])->name('sync.push');
 
-        Route::post('lists/{list}/members', [MemberController::class, 'store'])->name('members.store');
+        Route::post('lists/{list}/members', [MemberController::class, 'store'])->middleware('throttle:20,1')->name('members.store');
         Route::delete('lists/{list}/members/{email}', [MemberController::class, 'destroy'])->name('members.destroy');
-        Route::post('lists/{list}/invites', [InviteController::class, 'store'])->name('invites.store');
+        Route::post('lists/{list}/invites', [InviteController::class, 'store'])->middleware('throttle:20,1')->name('invites.store');
         Route::delete('lists/{list}/invites', [InviteController::class, 'destroy'])->name('invites.destroy');
 
         Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push.store');

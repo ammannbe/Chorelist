@@ -35,16 +35,27 @@ class IcalController extends Controller
 
     public static function url(User $user): ?string
     {
-        return $user->ical_token ? route('ical.show', $user->ical_token) : null;
+        return $user->ical_token ? route('ical.show', self::token($user)) : null;
+    }
+
+    /**
+     * The URL token is derived from the stored secret with the app key, so the database alone does
+     * not reveal the calendars.
+     */
+    private static function token(User $user): string
+    {
+        return $user->id.'-'.substr(hash_hmac('sha256', "ical:{$user->id}:{$user->ical_token}", config('app.key')), 0, 40);
     }
 
     public function show(string $token): Response
     {
-        $user = User::where('ical_token', $token)->firstOrFail();
+        $user = User::whereNotNull('ical_token')->find((int) strtok($token, '-'));
+        abort_unless($user !== null && hash_equals(self::token($user), $token), 404);
         $today = Schedule::today($user->timezone);
         $until = Schedule::addDays($today, self::DAYS_AHEAD);
 
         $tasks = Task::whereIn('task_list_id', $user->accessibleListIds())
+            ->whereHas('taskList')
             ->where('archived', false)
             ->where('mode', '!=', 'on_demand')
             ->with(['completions', 'taskList'])
@@ -104,7 +115,7 @@ class IcalController extends Controller
 
     private function escape(string $text): string
     {
-        return str_replace(['\\', ';', ',', "\r\n", "\n"], ['\\\\', '\;', '\,', '\n', '\n'], $text);
+        return str_replace(['\\', ';', ',', "\r\n", "\n", "\r"], ['\\\\', '\;', '\,', '\n', '\n', '\n'], $text);
     }
 
     /** Lines longer than 75 octets are folded (RFC 5545 3.1). */

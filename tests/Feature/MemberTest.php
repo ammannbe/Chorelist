@@ -26,18 +26,36 @@ class MemberTest extends TestCase
         return $list;
     }
 
-    public function test_owners_share_lists_with_existing_users(): void
+    public function test_existing_users_are_invited_and_join_after_confirming(): void
     {
         Notification::fake();
-        $owner = User::factory()->create();
+        $owner = User::factory()->create(['name' => 'Ben']);
         $member = User::factory()->create();
         $list = $this->listOf($owner);
 
         $this->actingAs($owner)->postJson("/lists/{$list->id}/members", ['email' => strtoupper($member->email)])
-            ->assertNoContent();
+            ->assertOk()->assertJson(['status' => 'invited']);
 
+        $this->assertFalse($list->hasMember($member));
+        $path = null;
+        Notification::assertSentTo($member, ListShared::class, function ($notification) use ($member, &$path) {
+            $path = parse_url($notification->toMail($member)->actionUrl, PHP_URL_PATH);
+
+            return in_array('mail', $notification->via($member), true);
+        });
+
+        // The invitation is only for that user, and opening it does not join yet.
+        $this->actingAs(User::factory()->create())->get($path)->assertRedirect('/#/invite-invalid');
+        $this->actingAs($member)->get($path)->assertOk()->assertSee('Ben')->assertSee('WG');
+        $this->assertFalse($list->hasMember($member));
+
+        $this->actingAs($member)->post($path)->assertRedirect("/#/list/{$list->id}");
         $this->assertTrue($list->hasMember($member));
-        Notification::assertSentTo($member, ListShared::class);
+        // Used up.
+        $this->actingAs($member)->post($path)->assertRedirect('/#/invite-invalid');
+
+        $this->actingAs($owner)->postJson("/lists/{$list->id}/members", ['email' => $member->email])
+            ->assertOk()->assertJson(['status' => 'member']);
     }
 
     public function test_unknown_users_are_invited(): void
@@ -47,7 +65,7 @@ class MemberTest extends TestCase
         $list = $this->listOf($owner);
 
         $this->actingAs($owner)->postJson("/lists/{$list->id}/members", ['email' => 'neu@example.com'])
-            ->assertNoContent();
+            ->assertOk()->assertJson(['status' => 'added']);
 
         $invited = User::firstWhere('email', 'neu@example.com');
         $this->assertNull($invited->email_verified_at);
@@ -89,7 +107,7 @@ class MemberTest extends TestCase
         $this->assertTrue($list->hasMember($owner));
     }
 
-    public function test_invitation_links_add_whoever_opens_them(): void
+    public function test_invitation_links_add_whoever_confirms_them(): void
     {
         $owner = User::factory()->create();
         $guest = User::factory()->unverified()->create();
@@ -102,14 +120,35 @@ class MemberTest extends TestCase
         // Logged out: login first, then back to the link.
         auth()->logout();
         $this->get($path)->assertRedirect('/login');
-        $this->actingAs($guest)->get($path)->assertRedirect("/#/list/{$list->id}");
+        // Opening shows the list and asks, joining needs the confirmation.
+        $this->actingAs($guest)->get($path)->assertOk()->assertSee('WG');
+        $this->assertFalse($list->hasMember($guest));
+        $this->actingAs($guest)->post($path)->assertRedirect("/#/list/{$list->id}");
         $this->assertTrue($list->hasMember($guest));
+        $this->actingAs($guest)->get($path)->assertRedirect("/#/list/{$list->id}");
 
         // Revoked or expired links do nothing.
         $this->actingAs($owner)->deleteJson("/lists/{$list->id}/invites")->assertNoContent();
         $other = User::factory()->create();
         $this->actingAs($other)->get($path)->assertRedirect('/#/invite-invalid');
         $this->assertFalse($list->hasMember($other));
+        $this->assertDatabaseMissing('list_invites', ['token' => basename($path)]);
+    }
+
+    public function test_sharing_is_throttled_and_does_not_reveal_accounts(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->create();
+        $stranger = User::factory()->create();
+        $list = $this->listOf($owner);
+
+        $this->actingAs($stranger)->deleteJson("/lists/{$list->id}/members/nobody@example.com")->assertForbidden();
+        $this->actingAs($stranger)->deleteJson("/lists/{$list->id}/members/{$owner->email}")->assertForbidden();
+
+        for ($i = 0; $i < 20; $i++) {
+            $this->actingAs($owner)->postJson("/lists/{$list->id}/invites")->assertOk();
+        }
+        $this->actingAs($owner)->postJson("/lists/{$list->id}/invites")->assertTooManyRequests();
     }
 
     public function test_reset_password_verifies_invited_users(): void
@@ -136,7 +175,7 @@ class MemberTest extends TestCase
         $victim = User::factory()->unverified()->create(['email' => 'anna@example.com']);
         $victim->passkeys()->create(['name' => 'Fremd', 'credential_id' => 'abc', 'credential' => []]);
 
-        $this->actingAs($owner)->postJson("/lists/{$list->id}/members", ['email' => $victim->email])->assertNoContent();
+        $this->actingAs($owner)->postJson("/lists/{$list->id}/members", ['email' => $victim->email])->assertOk();
         Notification::assertSentTo($victim, ListShared::class, function ($notification) use ($victim) {
             return str_contains($notification->toMail($victim)->actionUrl, '/reset-password/');
         });

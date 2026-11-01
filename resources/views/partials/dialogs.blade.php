@@ -147,14 +147,15 @@
     <template x-if="postponeDialog">
         <form @submit.prevent="savePostpone()" class="space-y-4">
             <h2 class="text-lg font-semibold" x-text="$t('Postpone “:task”', { task: postponeDialog.task.title })"></h2>
-            <label class="block">
+            <label class="block" x-show="!postponeDialog.impossible">
                 <span class="label" x-text="$t('Due on')"></span>
-                <input type="date" x-model="postponeDialog.date" class="field w-full" :min="postponeDialog.min" :max="postponeDialog.max || null" required>
+                <input type="date" x-model="postponeDialog.date" class="field w-full" :min="postponeDialog.min" :max="postponeDialog.max || null" :required="!postponeDialog.impossible">
             </label>
-            <p x-show="postponeDialog.max" class="text-sm text-stone-500" x-text="$t('At the latest until the day before the next date (:date).', { date: date(addDays(postponeDialog.max, 1)) })"></p>
+            <p x-show="postponeDialog.max && !postponeDialog.impossible" class="text-sm text-stone-500" x-text="$t('At the latest until the day before the next date (:date).', { date: date(addDays(postponeDialog.max, 1)) })"></p>
+            <p x-show="postponeDialog.impossible" class="text-sm text-stone-500" x-text="$t('The next date (:date) starts before, so this one cannot be postponed.', { date: date(addDays(postponeDialog.max, 1)) })"></p>
             <div class="flex justify-end gap-2 pt-2">
                 <button type="button" class="button-secondary" @click="$refs.postponeDialog.close()" x-text="$t('Cancel')"></button>
-                <button class="button" x-text="$t('Postpone')"></button>
+                <button class="button" x-show="!postponeDialog.impossible" x-text="$t('Postpone')"></button>
             </div>
         </form>
     </template>

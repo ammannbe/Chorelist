@@ -51,7 +51,7 @@ class SyncController extends Controller
             '*.newDocumentState' => ['required', 'array'],
             '*.newDocumentState.id' => ['required', 'uuid'],
             '*.newDocumentState._deleted' => ['boolean'],
-            '*.newDocumentState.version' => ['nullable', 'integer', 'min:1'],
+            '*.newDocumentState.version' => ['nullable', 'integer', 'min:1', 'max:4294967295'],
             ...$fields,
         ]);
 

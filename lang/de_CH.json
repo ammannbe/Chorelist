@@ -262,7 +262,6 @@
     "Invite": "Einladen",
     "Invite by email": "Per E-Mail einladen",
     "Join my task list “:list”:": "Komm in meine Aufgabenliste «:list»:",
-    "Joined with the invitation link": "Über den Einladungslink beigetreten",
     "Language": "Sprache",
     "last": "letzten",
     "last :date": "zuletzt :date",
@@ -668,5 +667,15 @@
     "“:task” skipped": "«:task» übersprungen",
     "“:task” taken back": "«:task» rückgängig gemacht",
     "“:task” was not done": "«:task» wurde nicht erledigt",
-    "Unknown push service.": "Unbekannter Push-Dienst."
+    "Unknown push service.": "Unbekannter Push-Dienst.",
+    ":name invites you to the task list \":list\".": ":name lädt dich zur Aufgabenliste «:list» ein.",
+    "The members see your name, what you have done and your holidays.": "Die Mitglieder sehen deinen Namen, was du erledigt hast, und deine Ferien.",
+    "Join list": "Liste beitreten",
+    "Not now": "Jetzt nicht",
+    "Invitation to a task list": "Einladung zu einer Aufgabenliste",
+    "Show invitation": "Einladung ansehen",
+    "Invitation sent to :email.": "Einladung an :email gesendet.",
+    ":member invited to the list": ":member zur Liste eingeladen",
+    "Joined the list": "Der Liste beigetreten",
+    "The next date (:date) starts before, so this one cannot be postponed.": "Der nächste Termin (:date) beginnt vorher, deshalb lässt sich dieser nicht verschieben."
 }

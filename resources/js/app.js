@@ -2,7 +2,7 @@ import Alpine from 'alpinejs';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
-import { createDatabase, removeDatabase, startReplication } from './db/index.js';
+import { createDatabase, removeDatabase, removeLocally, startReplication } from './db/index.js';
 import { compareBy, nextPosition, normalizeName, uuid7 } from './helpers.js';
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { createInstallStore } from './install.js';
@@ -553,8 +553,10 @@ Alpine.data('chorelist', () => ({
         if (!email) return;
         this.shareError = null;
         await this.online(async () => {
-            await api.post(`/lists/${this.listDialog.id}/members`, { email });
+            const { status } = await api.post(`/lists/${this.listDialog.id}/members`, { email });
             this.shareEmail = '';
+            // Existing users join after confirming the invitation.
+            if (status === 'invited') Alpine.store('notice').show(this.$t('Invitation sent to :email.', { email }));
             replication?.resync();
         }, (error) => { this.shareError = error; });
     },
@@ -695,12 +697,26 @@ Alpine.data('chorelist', () => ({
         if (form.id) {
             const doc = await db.tasks.findOne(form.id).exec();
             if (doc && doc.task_list_id !== form.task_list_id) {
-                // The server keeps a task in its list: moving is a new task (the history stays with the old one).
-                await this.insertTask({ ...doc.toJSON(), ...fields, task_list_id: form.task_list_id });
+                // The server keeps a task in its list: moving is a new task (the history stays with
+                // the old one). Unless the schedule changed, it starts with the next open occurrence
+                // instead of being due at once without the old completions.
+                const old = doc.toJSON();
+                const start = this.stateOf(old).start;
+                const sameSchedule = ['mode', 'rrule', 'starts_on', 'window_days'].every((key) => (fields[key] ?? null) === (old[key] ?? null));
+                const startsOn = sameSchedule && start && start > fields.starts_on ? start : fields.starts_on;
+                const id = await this.insertTask({ ...old, ...fields, starts_on: startsOn, task_list_id: form.task_list_id });
                 await doc.remove();
-            } else {
-                await doc?.incrementalPatch(fields);
+                // Back to where the old task was opened, which shows the new one instead.
+                if (this.navStack.at(-2) === `#/task/${form.id}`) {
+                    window.addEventListener('hashchange', () => { this.navReplacing = true; location.replace(`#/task/${id}`); }, { once: true });
+                    history.back();
+                } else {
+                    this.navReplacing = true;
+                    location.replace(`#/task/${id}`);
+                }
+                return;
             }
+            await doc?.incrementalPatch(fields);
             this.goBack(`#/task/${form.id}`);
             return;
         }
@@ -854,7 +870,9 @@ Alpine.data('chorelist', () => ({
         // Until the day before the next occurrence starts (only one occurrence is open at a time).
         const next = task.mode === 'fixed' ? upcoming(task, this.completionsOf(task.id), this.today, 1)[0] : null;
         const min = state.due > this.today ? addDays(state.due, 1) : addDays(this.today, 1);
-        this.postponeDialog = { task, date: min, min, max: next ? addDays(next, -1) : '' };
+        const max = next ? addDays(next, -1) : '';
+        // The next occurrence starts before the earliest possible day: nothing to postpone to.
+        this.postponeDialog = { task, date: max && max < min ? '' : min, min, max, impossible: Boolean(max && max < min) };
         this.$nextTick(() => this.$refs.postponeDialog.showModal());
     },
     async savePostpone() {
@@ -935,7 +953,8 @@ Alpine.data('chorelist', () => ({
             case 'member.added': return this.$t(':member added to the list', { member: this.memberName(data.email, a.task_list_id) });
             case 'member.removed': return this.$t(':member removed from the list', { member: data.email });
             case 'member.left': return this.$t(':member left the list', { member: data.email ?? '' });
-            case 'member.joined': return this.$t('Joined with the invitation link');
+            case 'member.invited': return this.$t(':member invited to the list', { member: data.email });
+            case 'member.joined': return this.$t('Joined the list');
             case 'completion.postponed': return this.$t('“:task” postponed to :date', { task, date: this.date(data.postponed_to) });
             case 'completion.undone': return this.$t('“:task” taken back', { task });
             default: return a.action;
@@ -1092,7 +1111,14 @@ Alpine.data('chorelist', () => ({
     /** All own data of this device as JSON (lists, tasks, history, holidays). */
     exportData() {
         const { lists, tasks, completions, activities, absences } = Alpine.store('data');
-        const json = JSON.stringify({ exported_at: new Date().toISOString(), user: this.me, lists, tasks, completions, activities, absences: absences.filter((a) => a.is_own) }, null, 2);
+        // Only what belongs to the user's lists (data of left lists may not be removed yet).
+        const ids = new Set(lists.map((list) => list.id));
+        const ofLists = (docs) => docs.filter((doc) => ids.has(doc.task_list_id));
+        const json = JSON.stringify({
+            exported_at: new Date().toISOString(), user: this.me, lists,
+            tasks: ofLists(tasks), completions: ofLists(completions), activities: ofLists(activities),
+            absences: absences.filter((a) => a.is_own),
+        }, null, 2);
         const link = document.createElement('a');
         link.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
         link.download = `chorelist-${this.today}.json`;
@@ -1197,6 +1223,15 @@ async function boot() {
         db[collection].find().$.subscribe((docs) => { data[collection] = docs.map((doc) => doc.toJSON()); });
     }
 
+    // A list disappeared (left, removed or deleted): its data goes from this device too.
+    let listIds = null;
+    db.lists.find().$.subscribe(async (docs) => {
+        const ids = new Set(docs.map((doc) => doc.id));
+        const gone = listIds ? [...listIds].filter((id) => !ids.has(id)) : [];
+        listIds = ids;
+        if (gone.length) await removeListData(gone, docs);
+    });
+
     window.addEventListener('online', () => { sync.online = true; });
     window.addEventListener('offline', () => {
         sync.online = false;
@@ -1260,6 +1295,20 @@ async function connect() {
 
     localStorage.setItem(OWNER_KEY, sync.user.email);
     if (!replication) startSync();
+}
+
+/**
+ * Removes tasks, completions and history of the lists, and the absences of people no list is
+ * shared with anymore (local only, see removeLocally).
+ */
+async function removeListData(listIds, lists) {
+    const inLists = { selector: { task_list_id: { $in: listIds } } };
+    const members = new Set(lists.flatMap((list) => (list.members ?? []).map((member) => member.email)));
+    const absences = (await db.absences.find().exec()).filter((absence) => !absence.is_own && !members.has(absence.user_email));
+    await Promise.all([
+        ...['tasks', 'completions', 'activities'].map(async (collection) => removeLocally(await db[collection].find(inLists).exec())),
+        removeLocally(absences),
+    ]);
 }
 
 function startSync() {

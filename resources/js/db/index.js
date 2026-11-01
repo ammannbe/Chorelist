@@ -1,4 +1,5 @@
 import { addRxPlugin, createRxDatabase, removeRxDatabase } from 'rxdb/plugins/core';
+import { RxDBCleanupPlugin } from 'rxdb/plugins/cleanup';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
 import { Subject, map } from 'rxjs';
@@ -6,6 +7,8 @@ import * as schemas from './schemas.js';
 
 // Local documents are migrated when a schema version increases (schemas.migrations).
 addRxPlugin(RxDBMigrationSchemaPlugin);
+// Deleted documents are kept for the replication, then removed from the device for good.
+addRxPlugin(RxDBCleanupPlugin);
 
 export const SYNCED_COLLECTIONS = ['lists', 'tasks', 'completions', 'activities', 'absences'];
 // Written by the server only.
@@ -30,6 +33,7 @@ export async function createDatabase({ storage, name = 'chorelist', multiInstanc
         storage,
         multiInstance,
         closeDuplicates: true,
+        cleanupPolicy: { minimumDeletedTime: 1000 * 60 * 60 * 24 * 7 },
     });
 
     await db.addCollections(Object.fromEntries(
@@ -45,6 +49,23 @@ export async function createDatabase({ storage, name = 'chorelist', multiInstanc
 
     return db;
 }
+
+// Ids of documents removed on this device only (removeLocally), their deletion is not pushed.
+const localOnly = new Set();
+
+/**
+ * Removes documents from this device without deleting them on the server, e.g. the data of a
+ * list the user left.
+ *
+ * @param {import('rxdb').RxDocument[]} docs
+ */
+export function removeLocally(docs) {
+    for (const doc of docs) localOnly.add(doc.id);
+
+    return Promise.all(docs.map((doc) => doc.remove()));
+}
+
+const skipLocalOnly = (doc) => (doc._deleted && localOnly.has(doc.id) ? null : doc);
 
 /**
  * Deletes the local database (last resort when it cannot be opened anymore).
@@ -77,6 +98,7 @@ export function startReplication(db, api, { retryTime = 5000 } = {}) {
         push: PULL_ONLY.includes(collection) ? undefined : {
             batchSize: 50,
             handler: (rows) => api.post(`/sync/${collection}/push`, rows),
+            modifier: skipLocalOnly,
         },
     }));
 
