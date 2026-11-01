@@ -25,6 +25,33 @@
         </form>
     </section>
 
+    @if (config('login.oidc.enabled') || auth()->user()->oidc_sub)
+        <section class="mb-10">
+            <h2 class="mb-2 text-lg font-semibold">{{ config('login.oidc.label') }}</h2>
+            @if (auth()->user()->oidc_sub)
+                <p class="mb-4 text-sm text-stone-600">{{ __('You can log in with :provider.', ['provider' => config('login.oidc.label')]) }}</p>
+                @if (auth()->user()->password !== null)
+                    <form method="POST" action="{{ route('oidc.unlink') }}">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="button-secondary w-full">{{ __('Unlink :provider', ['provider' => config('login.oidc.label')]) }}</button>
+                    </form>
+                @endif
+            @else
+                <p class="mb-4 text-sm text-stone-600">{{ __('Link your account to log in with :provider.', ['provider' => config('login.oidc.label')]) }}</p>
+                <a href="{{ route('oidc.redirect', ['link' => 1]) }}" class="button-secondary flex w-full items-center justify-center">
+                    {{ __('Link :provider', ['provider' => config('login.oidc.label')]) }}
+                </a>
+            @endif
+        </section>
+    @endif
+
+    @if (auth()->user()->password === null)
+        <section class="mb-10">
+            <h2 class="mb-2 text-lg font-semibold">{{ __('Password') }}</h2>
+            <p class="text-sm text-stone-600">{{ __('Your account has no password yet. You can set one with "Forgot your password?" on the login page.') }}</p>
+        </section>
+    @else
     <section class="mb-10">
         <h2 class="mb-4 text-lg font-semibold">{{ __('Change password') }}</h2>
 
@@ -55,6 +82,7 @@
             {{ trans_choice('{0} Set up passkey|{1} Manage passkey (:count)|[2,*] Manage passkeys (:count)', $passkeyCount, ['count' => $passkeyCount]) }}
         </a>
     </section>
+    @endif
 
     <section class="mb-10">
         <h2 class="mb-2 text-lg font-semibold text-red-800">{{ __('Delete account') }}</h2>
@@ -68,12 +96,17 @@
             </ul>
         @endif
 
-        <form method="POST" action="{{ route('account.destroy') }}" onsubmit="return confirm(@js(__('Delete your account for good?')))">
-            @csrf
-            @method('DELETE')
-            <x-input :label="__('Current Password')" name="password" type="password" required autocomplete="current-password" />
-            <button class="w-full rounded-lg bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-800">{{ __('Delete account') }}</button>
-        </form>
+        @if (auth()->user()->password === null)
+            {{-- Deleting needs the password as confirmation. --}}
+            <p class="text-sm text-stone-600">{{ __('To delete your account, first set a password with "Forgot your password?" on the login page.') }}</p>
+        @else
+            <form method="POST" action="{{ route('account.destroy') }}" onsubmit="return confirm(@js(__('Delete your account for good?')))">
+                @csrf
+                @method('DELETE')
+                <x-input :label="__('Current Password')" name="password" type="password" required autocomplete="current-password" />
+                <button class="w-full rounded-lg bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-800">{{ __('Delete account') }}</button>
+            </form>
+        @endif
     </section>
 
     <p class="text-sm"><a class="underline" href="/#/settings">{{ __('Back to the app') }}</a></p>

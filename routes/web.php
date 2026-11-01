@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\Auth\OidcController;
 use App\Http\Controllers\IcalController;
 use App\Http\Controllers\InviteController;
 use App\Http\Controllers\LocaleController;
@@ -15,6 +16,12 @@ use Illuminate\Support\Facades\Route;
 Route::view('/', 'app')->name('home');
 
 Route::put('locale', [LocaleController::class, 'update'])->name('locale.update');
+
+// Optional OpenID Connect login (config/login.php).
+Route::middleware('throttle:20,1')->group(function () {
+    Route::get('auth/oidc/redirect', [OidcController::class, 'redirect'])->name('oidc.redirect');
+    Route::get('auth/oidc/callback', [OidcController::class, 'callback'])->name('oidc.callback');
+});
 
 // Calendar subscription, authenticated by the secret token in the URL.
 Route::get('ical/{token}.ics', [IcalController::class, 'show'])->middleware('throttle:60,1')->name('ical.show');
@@ -38,6 +45,7 @@ Route::middleware('auth')->group(function () {
     Route::get('account', fn (Request $request) => view('account', [
         'passkeyCount' => $request->user()->passkeys()->count(),
     ]))->name('account');
+    Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
     Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
         'passkeys' => $request->user()->passkeys()->latest()->get(),
     ]))->middleware('password.confirm')->name('account.passkeys');
