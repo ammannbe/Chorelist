@@ -106,7 +106,10 @@
                 <div class="space-y-3 py-6 text-center">
                     <p class="text-lg font-semibold" x-text="$t('Welcome to Chorelist!')"></p>
                     <p class="text-stone-600" x-text="$t('Create a list for your household, add the chores and share the list with your flatmates or family.')"></p>
-                    <a href="#/lists" class="button inline-block" x-text="$t('Create a list')"></a>
+                    <div class="flex flex-wrap justify-center gap-2">
+                        <a href="#/lists" class="button inline-block" x-text="$t('Create a list')"></a>
+                        <button type="button" class="button-secondary" @click="openTemplateDialog()" x-text="`📋 ${$t('Import from a template')}`"></button>
+                    </div>
                 </div>
             </template>
 
@@ -153,6 +156,7 @@
                 <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="$t('New list, e.g. Household')" :aria-label="$t('New list')" enterkeyhint="done" maxlength="255">
                 <button class="button shrink-0" x-text="$t('Add')"></button>
             </form>
+            <button type="button" class="mb-4 -mt-2 text-sm font-medium text-stone-600 underline" @click="openTemplateDialog()" x-text="`📋 ${$t('Import from a template')}`"></button>
 
             <p x-show="!lists.length" class="py-8 text-center text-stone-500" x-text="$t('No lists yet.')"></p>
 
@@ -225,7 +229,11 @@
                         </template>
                     </div>
 
-                    <p x-show="!listGroups.length" class="py-6 text-center text-stone-500" x-text="$t('No tasks yet. Add the first one with +.')"></p>
+                    <div x-show="!listGroups.length && !categoryFilter" class="space-y-3 py-6 text-center">
+                        <p class="text-stone-500" x-text="$t('No tasks yet. Add the first one with +.')"></p>
+                        <button type="button" class="button-secondary" @click="openTemplateDialog(list.id)" x-text="`📋 ${$t('Import from a template')}`"></button>
+                    </div>
+                    <p x-show="!listGroups.length && categoryFilter" class="py-6 text-center text-stone-500" x-text="$t('No tasks yet. Add the first one with +.')"></p>
 
                     <template x-for="group in listGroups" :key="group.key">
                         <div>

@@ -15,6 +15,7 @@ import {
     addDays, daysBetween, describeSchedule, formatDate, fromSchedule, missed, nthLabel, occurrenceId, taskState, toSchedule, todayIn, upcoming, WEEKDAYS,
 } from './schedule.js';
 import { swipeRow } from './swipe.js';
+import { TEMPLATES, templateTask } from './templates.js';
 import { createUndoStore } from './undo.js';
 
 const RESYNC_INTERVAL = 30_000;
@@ -183,6 +184,9 @@ Alpine.data('chorelist', () => ({
     completeDialog: null,
     postponeDialog: null,
     askDialog: null,
+    // Import tasks from a template: { template, target (list id or 'new'), name, icon, starts_on, selected (titles) }.
+    templateDialog: null,
+    templates: TEMPLATES,
     absenceForm: { starts_on: '', ends_on: '', note: '' },
     historyFilter: { member: '', task: '', missed: true },
     statsPeriod: 'all',
@@ -486,13 +490,17 @@ Alpine.data('chorelist', () => ({
     async createList() {
         const name = this.newListName.trim();
         if (!name) return;
-        const id = uuid7();
         this.newListName = '';
+        location.hash = `#/list/${await this.insertList(name)}`;
+    },
+
+    async insertList(name, icon = null) {
+        const id = uuid7();
         const user = Alpine.store('sync').user;
         await db.lists.insert({
             id,
             name,
-            icon: null,
+            icon,
             ranking_enabled: true,
             ranking_period: 'all',
             owner_email: user?.email ?? null,
@@ -501,7 +509,64 @@ Alpine.data('chorelist', () => ({
             position: nextPosition(this.lists),
             muted: false,
         });
-        location.hash = `#/list/${id}`;
+
+        return id;
+    },
+
+    // ---- templates
+
+    openTemplateDialog(listId = null) {
+        const template = TEMPLATES[0];
+        this.$refs.listDialog?.close();
+        this.templateDialog = {
+            template: template.id,
+            target: listId ?? 'new',
+            name: this.$t(template.name),
+            icon: template.icon,
+            starts_on: this.today,
+            selected: [],
+        };
+        this.selectTemplateTasks();
+        this.$nextTick(() => this.$refs.templateDialog.showModal());
+    },
+    get dialogTemplate() {
+        return TEMPLATES.find((template) => template.id === this.templateDialog?.template) ?? null;
+    },
+    /** Titles of the template that the target list already has (not selected by default). */
+    get templateExisting() {
+        const dialog = this.templateDialog;
+        if (!dialog || dialog.target === 'new') return [];
+        const titles = new Set(this.visibleTasks.filter((task) => task.task_list_id === dialog.target).map((task) => task.title.trim().toLowerCase()));
+
+        return this.dialogTemplate.tasks.map((task) => task.title).filter((title) => titles.has(title.toLowerCase()));
+    },
+    /** Selects all tasks of the template the target list does not have yet. */
+    selectTemplateTasks(all = true) {
+        const dialog = this.templateDialog;
+        const existing = this.templateExisting;
+        if (dialog.target === 'new') {
+            const template = this.dialogTemplate;
+            dialog.name = this.$t(template.name);
+            dialog.icon = template.icon;
+        }
+        dialog.selected = all ? this.dialogTemplate.tasks.map((task) => task.title).filter((title) => !existing.includes(title)) : [];
+    },
+    toggleTemplateTask(title) {
+        const selected = this.templateDialog.selected;
+        this.templateDialog.selected = selected.includes(title) ? selected.filter((each) => each !== title) : [...selected, title];
+    },
+
+    async importTemplate() {
+        const dialog = this.templateDialog;
+        const tasks = this.dialogTemplate.tasks.filter((task) => dialog.selected.includes(task.title));
+        const name = dialog.name.trim();
+        if (!tasks.length || (dialog.target === 'new' && !name)) return;
+        const listId = dialog.target === 'new' ? await this.insertList(name.slice(0, 255), dialog.icon.trim() || null) : dialog.target;
+        const startsOn = dialog.starts_on || this.today;
+        for (const task of tasks) await this.insertTask(templateTask(task, listId, startsOn, addDays, uuid7));
+        this.$refs.templateDialog.close();
+        location.hash = `#/list/${listId}`;
+        Alpine.store('notice').show(tasks.length === 1 ? this.$t('1 task added.') : this.$t(':count tasks added.', { count: tasks.length }));
     },
 
     openListDialog(list = this.list) {

@@ -80,6 +80,10 @@
                 <p x-show="shareError" class="text-sm text-red-700" x-text="shareError"></p>
             </div>
 
+            <div class="border-t border-stone-200 pt-4">
+                <button type="button" class="button-secondary w-full" @click="openTemplateDialog(dialogList.id)" x-text="`📋 ${$t('Import tasks from a template')}`"></button>
+            </div>
+
             <div class="flex justify-start border-t border-stone-200 pt-4 text-sm">
                 <button type="button" x-show="dialogList.is_owner !== false" class="text-red-700 underline" @click="deleteList(dialogList.id)" x-text="$t('Delete list')"></button>
                 <button type="button" x-show="dialogList.is_owner === false" class="text-red-700 underline" @click="leaveList(dialogList.id)" x-text="$t('Leave list')"></button>
@@ -156,6 +160,70 @@
             <div class="flex justify-end gap-2 pt-2">
                 <button type="button" class="button-secondary" @click="$refs.postponeDialog.close()" x-text="$t('Cancel')"></button>
                 <button class="button" x-show="!postponeDialog.impossible" x-text="$t('Postpone')"></button>
+            </div>
+        </form>
+    </template>
+</dialog>
+
+{{-- Import tasks from a template into a new or existing list --}}
+<dialog x-ref="templateDialog" class="dialog" @close="templateDialog = null">
+    <template x-if="templateDialog && dialogTemplate">
+        <form @submit.prevent="importTemplate()" class="space-y-4">
+            <h2 class="text-lg font-semibold" x-text="$t('Import from a template')"></h2>
+            <label x-show="templates.length > 1" class="block">
+                <span class="label" x-text="$t('Template')"></span>
+                <select x-model="templateDialog.template" class="field w-full" @change="selectTemplateTasks()">
+                    <template x-for="template in templates" :key="template.id">
+                        <option :value="template.id" x-text="`${template.icon} ${$t(template.name)}`" :selected="template.id === templateDialog.template"></option>
+                    </template>
+                </select>
+            </label>
+            <p class="text-sm text-stone-600" x-text="`${dialogTemplate.icon} ${$t(dialogTemplate.description)}`"></p>
+            <label class="block">
+                <span class="label" x-text="$t('Into list')"></span>
+                <select x-model="templateDialog.target" class="field w-full" @change="selectTemplateTasks()">
+                    <option value="new" x-text="$t('New list')" :selected="templateDialog.target === 'new'"></option>
+                    <template x-for="item in lists" :key="item.id">
+                        <option :value="item.id" x-text="`${item.icon || '📋'} ${item.name}`" :selected="item.id === templateDialog.target"></option>
+                    </template>
+                </select>
+            </label>
+            <div x-show="templateDialog.target === 'new'" class="flex gap-2">
+                <x-icon-picker model="templateDialog.icon" />
+                <input x-model="templateDialog.name" class="field min-w-0 flex-1" :required="templateDialog.target === 'new'" maxlength="255" :aria-label="$t('Name')">
+            </div>
+            <label class="block">
+                <span class="label" x-text="$t('Start from')"></span>
+                <input type="date" x-model="templateDialog.starts_on" class="field w-full" required>
+                <span class="mt-1 block text-xs text-stone-500" x-text="$t('The first dates are spread from this day on. You can change everything afterwards.')"></span>
+            </label>
+            <div>
+                <div class="mb-1 flex items-center justify-between">
+                    <span class="label !mb-0" x-text="$t('Tasks (:count)', { count: templateDialog.selected.length })"></span>
+                    <span class="space-x-3 text-sm">
+                        <button type="button" class="underline" @click="selectTemplateTasks()" x-text="$t('Select all')"></button>
+                        <button type="button" class="underline" @click="selectTemplateTasks(false)" x-text="$t('Select none')"></button>
+                    </span>
+                </div>
+                <ul class="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                    <template x-for="task in dialogTemplate.tasks" :key="task.title">
+                        <li>
+                            <label class="flex items-center gap-3 px-3 py-2">
+                                <input type="checkbox" class="size-4 shrink-0 accent-sky-700" :checked="templateDialog.selected.includes(task.title)" @change="toggleTemplateTask(task.title)">
+                                <span class="w-6 shrink-0 text-center text-lg" aria-hidden="true" x-text="task.icon"></span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate" x-text="task.title"></span>
+                                    <span class="block truncate text-xs text-stone-500"
+                                        x-text="[schedule(task), task.category, templateExisting.includes(task.title) ? $t('Already in the list') : null].filter(Boolean).join(' · ')"></span>
+                                </span>
+                            </label>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" class="button-secondary" @click="$refs.templateDialog.close()" x-text="$t('Cancel')"></button>
+                <button class="button" :disabled="!templateDialog.selected.length" x-text="$t('Add')"></button>
             </div>
         </form>
     </template>
