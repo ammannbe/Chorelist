@@ -24,7 +24,7 @@
 
             <h1 class="min-w-0 flex-1 truncate text-lg font-semibold">
                 <span x-show="['home', 'lists'].includes(route.view)" class="flex items-center gap-2">
-                    <img src="/favicon.svg" alt="" class="size-7 rounded-md">
+                    <img src="/favicon-96x96.png" alt="" class="size-7 rounded-md">
                     <span>Chorelist</span>
                 </span>
                 <span x-show="route.view === 'list' || route.view === 'history' || route.view === 'stats'" class="block truncate"

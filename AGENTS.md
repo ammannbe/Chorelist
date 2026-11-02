@@ -81,7 +81,7 @@ Same architecture as Shoppinglist:
 
 ## PWA, UI patterns, deployment
 
-As in Shoppinglist: `vite-plugin-pwa` (generateSW, `registerType: 'prompt'`), app shell `/` without user data, `data-online` links, `<x-swipe-row>` actions (swipe or long press, `preferences.row_actions`), undo toasts (`resources/js/undo.js`, also used to take back completions), dialogs with history entries (`layers.js`), install instructions (`install.js`, `#/install`). Favicons: `src/favicon.svg` → `ddev npm run favicon -- --source src/favicon.svg --theme '#0369a1' --bg '#0369a1' --padding-scale 1`. Link preview image `public/og-image.png`.
+As in Shoppinglist: `vite-plugin-pwa` (generateSW, `registerType: 'prompt'`), app shell `/` without user data, `data-online` links, `<x-swipe-row>` actions (swipe or long press, `preferences.row_actions`), undo toasts (`resources/js/undo.js`, also used to take back completions), dialogs with history entries (`layers.js`), install instructions (`install.js`, `#/install`). Icon: the Narrenhaus jester in blue in a bucket with a check mark, master `src/logo.svg`, rendered to `src/favicon.png` (1024 px, transparent) → `ddev npm run favicon -- --source src/favicon.png --theme '#0369a1' --bg '#fafaf9' --padding-bg '#dbeefa' --clean`; the header shows `favicon-96x96.png`. Link preview image `public/og-image.png` (1200×630).
 
 Deployment: `.forgejo/workflows/deploy.yml` (same as Shoppinglist, default URL `https://aufgaben.narrenhaus.ch`).
 
