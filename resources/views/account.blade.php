@@ -1,6 +1,29 @@
 <x-guest-layout :title="__('Account')">
     <p class="mb-6 text-sm text-stone-600">{{ __('Logged in as :email', ['email' => auth()->user()->email]) }}</p>
 
+    @if (config('login.oidc.enabled') || auth()->user()->oidc_sub)
+        @php($provider = App\Auth\OidcLabel::get())
+        <section class="mb-10">
+            <h2 class="mb-2 text-lg font-semibold">{{ $provider }}</h2>
+            @if (auth()->user()->oidc_sub)
+                <p class="mb-4 text-sm text-stone-600">{{ __('You can log in with :provider.', ['provider' => $provider]) }}</p>
+                @if (auth()->user()->password !== null)
+                    <form method="POST" action="{{ route('oidc.unlink') }}">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="button-secondary w-full">{{ __('Unlink :provider', ['provider' => $provider]) }}</button>
+                    </form>
+                @endif
+            @else
+                <p class="mb-4 text-sm text-stone-600">{{ __('Link your account to log in with :provider.', ['provider' => $provider]) }}</p>
+                <a href="{{ route('oidc.redirect', ['link' => 1]) }}" class="button-secondary flex w-full items-center justify-center">
+                    {{ __('Link :provider', ['provider' => $provider]) }}
+                </a>
+                <x-oidc-signup class="mt-3" />
+            @endif
+        </section>
+    @endif
+
     <section class="mb-10">
         <h2 class="mb-2 text-lg font-semibold">{{ __('Name and email') }}</h2>
         <p class="mb-4 text-sm text-stone-600">{{ __('The members of your lists see your name (otherwise your email address).') }}</p>
@@ -24,27 +47,6 @@
             <x-button>{{ __('Save') }}</x-button>
         </form>
     </section>
-
-    @if (config('login.oidc.enabled') || auth()->user()->oidc_sub)
-        <section class="mb-10">
-            <h2 class="mb-2 text-lg font-semibold">{{ config('login.oidc.label') }}</h2>
-            @if (auth()->user()->oidc_sub)
-                <p class="mb-4 text-sm text-stone-600">{{ __('You can log in with :provider.', ['provider' => config('login.oidc.label')]) }}</p>
-                @if (auth()->user()->password !== null)
-                    <form method="POST" action="{{ route('oidc.unlink') }}">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="button-secondary w-full">{{ __('Unlink :provider', ['provider' => config('login.oidc.label')]) }}</button>
-                    </form>
-                @endif
-            @else
-                <p class="mb-4 text-sm text-stone-600">{{ __('Link your account to log in with :provider.', ['provider' => config('login.oidc.label')]) }}</p>
-                <a href="{{ route('oidc.redirect', ['link' => 1]) }}" class="button-secondary flex w-full items-center justify-center">
-                    {{ __('Link :provider', ['provider' => config('login.oidc.label')]) }}
-                </a>
-            @endif
-        </section>
-    @endif
 
     @if (auth()->user()->password === null)
         <section class="mb-10">
