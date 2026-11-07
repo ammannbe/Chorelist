@@ -21,4 +21,10 @@ describe('schemas', () => {
         expect(schemas.migrations.lists[1](doc)).toEqual({ ...doc, households: [], direct: true });
         expect(Object.keys(schemas.lists.properties)).toEqual(expect.arrayContaining(['households', 'direct']));
     });
+
+    it('migrate tasks to the dates of the schedule', () => {
+        const doc = { id: '0190c1e2-0000-7000-8000-000000000000', title: 'Bad', mode: 'fixed' };
+        expect(schemas.migrations.tasks[1](doc)).toEqual({ ...doc, dates: null });
+        expect(schemas.tasks.properties.dates).toBeDefined();
+    });
 });

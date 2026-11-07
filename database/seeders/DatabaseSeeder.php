@@ -36,9 +36,11 @@ class DatabaseSeeder extends Seeder
             ['title' => 'Müll entsorgen', 'icon' => '🗑️', 'points' => 1, 'mode' => 'on_demand', 'remind_after_days' => 4],
             ['title' => 'Pflanzen giessen', 'icon' => '🪴', 'points' => 1, 'mode' => 'after_completion', 'rrule' => 'FREQ=DAILY;INTERVAL=3'],
             ['title' => 'Kühlschrank ausmisten', 'icon' => '🧊', 'points' => 3, 'mode' => 'fixed', 'rrule' => 'FREQ=WEEKLY;INTERVAL=2;BYDAY=FR', 'window_days' => 2],
+            ['title' => 'Kartonsammlung', 'icon' => '📦', 'category' => 'Entsorgung', 'points' => 1, 'mode' => 'dates', 'reminders' => [1],
+                'dates' => array_map(fn (int $days) => Schedule::addDays($today, $days), [-11, 3, 31, 59])],
         ];
         foreach ($tasks as $attributes) {
-            $task = new Task([...$attributes, 'starts_on' => Schedule::addDays($today, -14)]);
+            $task = new Task([...$attributes, 'starts_on' => $attributes['dates'][0] ?? Schedule::addDays($today, -14)]);
             $task->id = (string) Str::uuid7();
             $task->taskList()->associate($list);
             $task->creator()->associate($user);

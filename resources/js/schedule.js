@@ -4,14 +4,17 @@ import { RRule } from 'rrule';
 // by both test suites). Dates are "YYYY-MM-DD" strings, computed as UTC midnight.
 //
 // Modes: fixed (calendar, RRULE from starts_on), after_completion (interval after the last
-// completion), once, on_demand (no due date). An occurrence starts on its date and is due
+// completion), once, dates (one occurrence on each given date, e.g. waste collection), on_demand
+// (no due date). An occurrence starts on its date and is due
 // window_days later (or on the date it was postponed to). Only one occurrence is open at a time.
 
-export const MODES = ['fixed', 'after_completion', 'once', 'on_demand'];
+export const MODES = ['fixed', 'after_completion', 'once', 'dates', 'on_demand'];
+// Dates of a task in the mode `dates` (same as Schedule::MAX_DATES).
+export const MAX_DATES = 400;
 const MAX_AHEAD = 60;
 
 /**
- * @param {{ mode: string, rrule?: string|null, starts_on: string, window_days?: number, ends_on?: string|null, paused_until?: string|null }} task
+ * @param {{ mode: string, rrule?: string|null, starts_on: string, window_days?: number, ends_on?: string|null, paused_until?: string|null, dates?: string[]|null }} task
  * @param {{ occurrence: string|null, done_on: string, type: string, postponed_to?: string|null }[]} completions of this task
  * @param {string} today
  * @returns {{ occurrence: string|null, start: string|null, due: string|null, status: string, last_done: string|null }}
@@ -25,6 +28,7 @@ export function taskState(task, completions, today) {
     let start;
     if (task.mode === 'once') start = isResolved(completions, task.starts_on) ? null : task.starts_on;
     else if (task.mode === 'after_completion') start = afterCompletionStart(task, completions);
+    else if (task.mode === 'dates') start = datesStart(task, completions, today);
     else start = fixedStart(task, completions, today);
 
     if (start === null) return { ...base, status: 'finished' };
@@ -36,20 +40,21 @@ export function taskState(task, completions, today) {
 }
 
 /**
- * Occurrence dates of a fixed (or once) task between two dates, inclusive.
+ * Occurrence dates of a fixed (once, dates) task between two dates, inclusive.
  */
 export function occurrences(task, from, to) {
     if (task.mode === 'once') return task.starts_on >= from && task.starts_on <= to ? [task.starts_on] : [];
+    if (task.mode === 'dates') return normalizeDates(task.dates).filter((date) => date >= from && date <= to);
     if (task.mode !== 'fixed') return [];
 
     return rule(task).between(toDate(from), toDate(to), true).map(fromDate);
 }
 
 /**
- * Occurrences of a fixed task before the open one that were neither done nor skipped.
+ * Occurrences of a fixed (or dates) task before the open one that were neither done nor skipped.
  */
 export function missed(task, completions, from, today) {
-    if (task.mode !== 'fixed') return [];
+    if (!['fixed', 'dates'].includes(task.mode)) return [];
     completions = completions.filter((c) => c.type !== 'undone');
     const open = taskState(task, completions, today).start ?? addDays(today, 1);
     const until = open < today ? open : today;
@@ -70,6 +75,9 @@ export function upcoming(task, completions, today, count = 3) {
         let date = state.start > today ? state.start : today;
         for (let i = 0; i < count; i++) dates.push(date = addInterval(date, task.rrule));
         return task.ends_on ? dates.filter((each) => each <= task.ends_on) : dates;
+    }
+    if (task.mode === 'dates') {
+        return normalizeDates(task.dates).filter((date) => date > state.start && !isPaused(task, date)).slice(0, count);
     }
     if (task.mode !== 'fixed') return [];
     const dates = [];
@@ -104,6 +112,11 @@ export function todayIn(timeZone = undefined, now = new Date()) {
     const get = (type) => parts.find((part) => part.type === type).value;
 
     return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/** Dates of the mode `dates`: valid YYYY-MM-DD strings, sorted, each once (same as Schedule::normalizeDates). */
+export function normalizeDates(dates) {
+    return [...new Set((Array.isArray(dates) ? dates : []).filter((date) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort();
 }
 
 export function addDays(date, days) {
@@ -165,6 +178,9 @@ export function fromSchedule(task) {
         monthDay: Number(parts.BYMONTHDAY ?? 0) || null,
         nth: 1,
         nthDay: 'MO',
+        // Mode `dates`: the dates and the one being added.
+        dates: normalizeDates(task.dates),
+        newDate: '',
     };
     if (task.mode === 'fixed' && parts.FREQ === 'MONTHLY' && parts.BYDAY) {
         const match = parts.BYDAY.match(/^([+-]?\d)?(MO|TU|WE|TH|FR|SA|SU)$/);
@@ -177,9 +193,9 @@ export function fromSchedule(task) {
 
 /**
  * Mode and RRULE from the form fields (repeat: once, daily, weekly, monthly, yearly,
- * after_completion, on_demand).
+ * after_completion, dates, on_demand). The mode `dates` also returns the dates.
  *
- * @returns {{ mode: string, rrule: string|null }}
+ * @returns {{ mode: string, rrule: string|null, dates?: string[] }}
  */
 export function toSchedule(form, startsOn) {
     const interval = Math.max(1, Math.min(999, Math.round(Number(form.interval) || 1)));
@@ -188,6 +204,8 @@ export function toSchedule(form, startsOn) {
         case 'once':
         case 'on_demand':
             return { mode: form.repeat, rrule: null };
+        case 'dates':
+            return { mode: 'dates', rrule: null, dates: normalizeDates(form.dates).slice(0, MAX_DATES) };
         case 'after_completion':
             return { mode: 'after_completion', rrule: `FREQ=${(form.unit || 'weekly').toUpperCase()}${every}` };
         case 'weekly': {
@@ -210,8 +228,9 @@ export function toSchedule(form, startsOn) {
  * Human readable schedule, e.g. "Every 2 weeks on Monday" / "Jeden 4. Montag im Monat".
  *
  * @param {(key: string, replace?: object) => string} t translator
+ * @param {string} today for the next date of the mode `dates`
  */
-export function describeSchedule(task, t, locale) {
+export function describeSchedule(task, t, locale, today = todayIn()) {
     const parts = parseRule(task.rrule);
     const interval = Number(parts.INTERVAL ?? 1);
     const lang = locale.replace('_', '-');
@@ -221,6 +240,14 @@ export function describeSchedule(task, t, locale) {
 
     if (task.mode === 'on_demand') return t('When needed');
     if (task.mode === 'once') return t('Once on :date', { date: formatDate(task.starts_on, locale) });
+    if (task.mode === 'dates') {
+        const dates = normalizeDates(task.dates);
+        const next = dates.find((each) => each >= today);
+        const replace = { count: dates.length, date: formatDate(next, locale, { day: '2-digit', month: '2-digit', year: 'numeric' }) };
+        if (!dates.length) return t('No dates yet');
+        if (!next) return dates.length === 1 ? t('1 date, none left') : t(':count dates, none left', replace);
+        return dates.length === 1 ? t('1 date, on :date', replace) : t(':count dates, next :date', replace);
+    }
     const unit = {
         DAILY: [t('Every day'), t('Every :n days', { n: interval })],
         WEEKLY: [t('Every week'), t('Every :n weeks', { n: interval })],
@@ -285,6 +312,16 @@ function fixedStart(task, completions, today) {
     }
 
     return null;
+}
+
+// Same as fixedStart() with the given dates instead of a rule.
+function datesStart(task, completions, today) {
+    const dates = normalizeDates(task.dates);
+    const started = dates.filter((date) => date <= today);
+    const last = started.length ? started.at(-1) : null;
+    if (last !== null && !isPaused(task, last) && !isResolved(completions, last)) return last;
+
+    return dates.find((date) => (last === null || date > last) && !isPaused(task, date) && !isResolved(completions, date)) ?? null;
 }
 
 function afterCompletionStart(task, completions) {

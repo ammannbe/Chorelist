@@ -53,6 +53,7 @@
                         <option value="monthly" x-text="$t('Monthly')"></option>
                         <option value="yearly" x-text="$t('Yearly')"></option>
                         <option value="after_completion" x-text="$t('Some time after it was done')"></option>
+                        <option value="dates" x-text="$t('On specific dates')"></option>
                         <option value="on_demand" x-text="$t('When needed (no date)')"></option>
                     </select>
                 </label>
@@ -103,8 +104,25 @@
                     </label>
                 </div>
 
+                {{-- Mode `dates`: the dates one by one (e.g. waste collection), past ones dimmed --}}
+                <div x-show="form.repeat === 'dates'">
+                    <span class="label" x-text="$t('Dates (:count)', { count: form.dates.length })"></span>
+                    <ul x-show="form.dates.length" class="mb-2 max-h-60 divide-y divide-stone-200 overflow-y-auto rounded-lg border border-stone-200">
+                        <template x-for="day in form.dates" :key="day">
+                            <li class="flex items-center gap-2 px-3 py-1.5" :class="day < today && 'text-stone-400'">
+                                <span class="flex-1 tabular-nums" x-text="date(day, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })"></span>
+                                <button type="button" class="text-stone-500" @click="removeDate(day)" :aria-label="$t('Remove')">✕</button>
+                            </li>
+                        </template>
+                    </ul>
+                    <div class="flex gap-2">
+                        <input x-model="form.newDate" type="date" class="field min-w-0 flex-1" :aria-label="$t('Add a date')" @keydown.enter.prevent="addDate()">
+                        <button type="button" class="button-secondary" @click="addDate()" x-text="$t('Add')"></button>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
-                    <label class="block">
+                    <label x-show="form.repeat !== 'dates'" class="block">
                         <span class="label" x-text="form.repeat === 'once' ? $t('Date') : form.repeat === 'on_demand' ? $t('From') : $t('First date')"></span>
                         <input x-model="form.starts_on" type="date" class="field w-full" required>
                     </label>

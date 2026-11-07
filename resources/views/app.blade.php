@@ -223,6 +223,7 @@
                         <a :href="`#/history/${list.id}`" class="chip" x-text="`🕘 ${$t('History')}`"></a>
                         <a :href="`#/stats/${list.id}`" class="chip" x-text="`📊 ${$t('Statistics')}`"></a>
                         <button type="button" x-show="loggedIn" class="chip" @click="openListDialog(list, 'share')" x-text="`👥 ${list.is_owner ? $t('Share') : $t('Members')}`"></button>
+                        <button type="button" class="chip" @click="openWasteDialog(list.id)" x-text="`♻️ ${$t('Collection dates')}`"></button>
                     </div>
 
                     {{-- Filter by category (this device) --}}

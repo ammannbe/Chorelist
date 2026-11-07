@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'title', 'notes', 'icon', 'category', 'points', 'mode', 'rrule', 'starts_on', 'window_days', 'ends_on',
+    'title', 'notes', 'icon', 'category', 'points', 'mode', 'rrule', 'starts_on', 'window_days', 'ends_on', 'dates',
     'reminders', 'remind_after_days', 'paused_until', 'archived', 'checklist',
 ])]
 class Task extends Model
@@ -20,7 +20,7 @@ class Task extends Model
 
     /** Fields shown in the history when changed (activities). */
     public const TRACKED = [
-        'title', 'notes', 'icon', 'category', 'points', 'mode', 'rrule', 'starts_on', 'window_days', 'ends_on',
+        'title', 'notes', 'icon', 'category', 'points', 'mode', 'rrule', 'starts_on', 'window_days', 'ends_on', 'dates',
         'reminders', 'remind_after_days', 'paused_until', 'archived',
     ];
 
@@ -34,6 +34,7 @@ class Task extends Model
             'ends_on' => DateOnly::class,
             'paused_until' => DateOnly::class,
             'archived' => 'boolean',
+            'dates' => 'array',
             'reminders' => 'array',
             'checklist' => 'array',
         ];

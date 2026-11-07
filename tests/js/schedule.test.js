@@ -26,6 +26,11 @@ describe('upcoming', () => {
         const task = { mode: 'fixed', rrule: 'FREQ=WEEKLY;BYDAY=MO', starts_on: '2026-11-02' };
         expect(upcoming(task, [], '2026-11-01', 2)).toEqual(['2026-11-09', '2026-11-16']);
     });
+
+    it('lists the dates after the open one', () => {
+        const task = { mode: 'dates', starts_on: '2026-11-03', dates: ['2026-11-03', '2026-11-10', '2026-11-17', '2026-11-24'], paused_until: '2026-11-08' };
+        expect(upcoming(task, [], '2026-11-01', 3)).toEqual(['2026-11-17', '2026-11-24']);
+    });
 });
 
 describe('occurrenceId', () => {
@@ -45,6 +50,7 @@ describe('schedule form', () => {
         [{ repeat: 'monthly', interval: 3, monthly: 'day', monthDay: null }, { mode: 'fixed', rrule: 'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=4' }],
         [{ repeat: 'after_completion', interval: 10, unit: 'daily' }, { mode: 'after_completion', rrule: 'FREQ=DAILY;INTERVAL=10' }],
         [{ repeat: 'on_demand' }, { mode: 'on_demand', rrule: null }],
+        [{ repeat: 'dates', dates: ['2027-01-12', '2027-01-05', '2027-01-12', ''] }, { mode: 'dates', rrule: null, dates: ['2027-01-05', '2027-01-12'] }],
     ];
 
     it.each(cases)('%o', (form, expected) => {
@@ -56,6 +62,8 @@ describe('schedule form', () => {
         expect(fromSchedule({ mode: 'fixed', rrule: 'FREQ=MONTHLY;BYDAY=4MO' })).toMatchObject({ repeat: 'monthly', monthly: 'weekday', nth: 4, nthDay: 'MO' });
         expect(fromSchedule({ mode: 'fixed', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH' })).toMatchObject({ repeat: 'weekly', interval: 2, weekdays: ['MO', 'TH'] });
         expect(fromSchedule({ mode: 'after_completion', rrule: 'FREQ=DAILY;INTERVAL=3' })).toMatchObject({ repeat: 'after_completion', unit: 'daily', interval: 3 });
+        expect(fromSchedule({ mode: 'dates', rrule: null, dates: ['2027-01-05'] })).toMatchObject({ repeat: 'dates', dates: ['2027-01-05'] });
+        expect(fromSchedule({ mode: 'fixed', rrule: 'FREQ=YEARLY', dates: null })).toMatchObject({ dates: [] });
     });
 
     it('describes the schedule', () => {
@@ -63,6 +71,11 @@ describe('schedule form', () => {
         expect(describeSchedule({ mode: 'fixed', rrule: 'FREQ=MONTHLY;BYDAY=4MO' }, t, 'en')).toBe('Every month on the fourth Monday');
         expect(describeSchedule({ mode: 'fixed', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH' }, t, 'en')).toBe('Every :n weeks on Monday, Thursday'.replace(':n', 2));
         expect(describeSchedule({ mode: 'on_demand' }, t, 'en')).toBe('When needed');
+        const dates = { mode: 'dates', dates: ['2027-01-05', '2027-01-14', '2027-02-02'] };
+        expect(describeSchedule(dates, t, 'de_CH', '2027-01-06')).toBe('3 dates, next 14.01.2027');
+        expect(describeSchedule(dates, t, 'de_CH', '2027-03-01')).toBe('3 dates, none left');
+        expect(describeSchedule({ mode: 'dates', dates: ['2027-01-05'] }, t, 'de_CH', '2027-01-01')).toBe('1 date, on 05.01.2027');
+        expect(describeSchedule({ mode: 'dates', dates: [] }, t, 'en', '2027-01-01')).toBe('No dates yet');
     });
 });
 

@@ -2,7 +2,8 @@
 
 Offline-first web app (PWA) for shared household chores, similar to the tasks of Flatastic. German and English.
 
-- **Recurring tasks**: daily, weekly on chosen days, monthly (day, “4th Monday”, last day), yearly, some time after the last completion, once, or when needed. Optional time window (“one week to do it”), end date, pausing.
+- **Recurring tasks**: daily, weekly on chosen days, monthly (day, “4th Monday”, last day), yearly, some time after the last completion, once, on specific dates, or when needed. Optional time window (“one week to do it”), end date, pausing.
+- **Waste collection calendars**: import the collection dates of your municipality from a calendar file (.ics/.vcs), one task per type of waste.
 - **Reminders** by push and/or email per kind of notification, at your reminder time; overdue notices, weekly summary.
 - **History** of who did, skipped, postponed or changed what; missed dates.
 - **Points ranking** per list (optional, per week, month or all time), fair with holidays, and personal suggestions which task is worth doing next.

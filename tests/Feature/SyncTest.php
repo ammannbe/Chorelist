@@ -130,6 +130,50 @@ class SyncTest extends TestCase
         ]]])->assertUnprocessable();
     }
 
+    public function test_tasks_on_specific_dates_keep_their_sorted_dates(): void
+    {
+        $user = User::factory()->create();
+        $listId = $this->createList($user);
+        $taskId = $this->createTask($user, $listId, [
+            'mode' => 'dates', 'rrule' => 'FREQ=WEEKLY', 'starts_on' => '2026-11-02', 'ends_on' => '2027-01-01',
+            'dates' => ['2027-01-12', '2027-01-05', '2027-01-12'],
+        ]);
+
+        $doc = $this->pull($user, 'tasks')->assertOk()
+            ->assertJsonPath('documents.0.id', $taskId)
+            ->assertJsonPath('documents.0.dates', ['2027-01-05', '2027-01-12'])
+            // The first date is the start date, no rule and no end.
+            ->assertJsonPath('documents.0.starts_on', '2027-01-05')
+            ->assertJsonPath('documents.0.rrule', null)
+            ->assertJsonPath('documents.0.ends_on', null)
+            ->json('documents.0');
+
+        // Changed dates are recorded by their number.
+        $this->push($user, 'tasks', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'dates' => ['2027-01-05', '2027-01-12', '2027-01-19'], 'version' => 2]]])
+            ->assertOk()->assertExactJson([]);
+        $this->assertSame(['dates' => [2, 3]], Activity::where('action', 'task.updated')->sole()->data['changes']);
+
+        // Other modes have no dates.
+        $otherId = $this->createTask($user, $listId, ['dates' => ['2027-01-05']]);
+        $this->assertNull(Task::find($otherId)->dates);
+    }
+
+    public function test_tasks_on_specific_dates_need_valid_dates(): void
+    {
+        $user = User::factory()->create();
+        $listId = $this->createList($user);
+        $push = fn (array $attributes) => $this->push($user, 'tasks', [['newDocumentState' => [
+            'id' => (string) Str::uuid(), 'task_list_id' => $listId, 'title' => 'Kehricht', 'mode' => 'dates', 'starts_on' => '2027-01-05',
+            ...$attributes,
+        ]]]);
+
+        $push([])->assertUnprocessable();
+        $push(['dates' => []])->assertUnprocessable();
+        $push(['dates' => ['5.1.2027']])->assertUnprocessable();
+        $push(['dates' => array_map(fn (int $day) => Carbon::parse('2027-01-01')->addDays($day)->format('Y-m-d'), range(0, 400))])->assertUnprocessable();
+        $push(['dates' => ['2027-01-05']])->assertOk();
+    }
+
     public function test_task_changes_are_recorded_and_stale_updates_conflict(): void
     {
         [$owner, $member, $listId] = $this->shared();

@@ -44,7 +44,7 @@ export const lists = {
 };
 
 export const tasks = {
-    version: 0,
+    version: 1,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -55,12 +55,14 @@ export const tasks = {
         icon: { type: ['string', 'null'] },
         category: { type: ['string', 'null'] },
         points: { type: 'integer', minimum: 1, maximum: 5, default: 1 },
-        // fixed, after_completion, once, on_demand (resources/js/schedule.js)
+        // fixed, after_completion, once, dates, on_demand (resources/js/schedule.js)
         mode: { type: 'string' },
         rrule: { type: ['string', 'null'] },
         starts_on: { type: 'string', maxLength: 10 },
         window_days: { type: 'integer', minimum: 0, default: 0 },
         ends_on: date,
+        // Mode `dates`: sorted YYYY-MM-DD dates of the occurrences (starts_on is the first one).
+        dates: { type: ['array', 'null'], items: { type: 'string' } },
         // Days before the due date.
         reminders: { type: 'array', items: { type: 'integer' }, default: [] },
         remind_after_days: { type: ['integer', 'null'] },
@@ -142,5 +144,9 @@ export const migrations = {
     lists: {
         // Households (filled by the next pull, see REPLICATION_RUNS).
         1: (doc) => ({ ...doc, households: [], direct: true }),
+    },
+    tasks: {
+        // Schedule mode `dates`.
+        1: (doc) => ({ ...doc, dates: doc.dates ?? null }),
     },
 };
