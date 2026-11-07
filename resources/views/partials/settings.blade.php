@@ -1,23 +1,13 @@
 {{-- Settings, notifications, holidays and install instructions (part of the app shell, available offline). --}}
 <section x-show="route.view === 'settings'" class="space-y-6">
-    <div>
+    {{-- Logged in: "Manage account" at the bottom (partials/account.blade.php) --}}
+    <div x-show="!loggedIn">
         <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Account')"></h2>
-        <div class="rounded-lg border border-stone-200 bg-white p-4">
-            <template x-if="loggedIn">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <span class="min-w-0 break-all" x-text="$t('Logged in as :email', { email: $store.sync.user.email })"></span>
-                    <button type="button" class="button-secondary shrink-0 whitespace-nowrap" @click="logout()" :disabled="busy" x-text="$t('Log Out')"></button>
-                    <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$store.sync.user.linked ? $t('Name and deleting the account') : $t('Name, password, passkeys and deleting the account')"></a>
-                </div>
-            </template>
-            <template x-if="!loggedIn">
-                <p>
-                    <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
-                    <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
-                    <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
-                </p>
-            </template>
-        </div>
+        <p class="rounded-lg border border-stone-200 bg-white p-4">
+            <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
+            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
+            <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
+        </p>
     </div>
 
     <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
@@ -131,6 +121,8 @@
             <button type="button" class="button-secondary" @click="exportData()" x-text="$t('Export data')"></button>
         </div>
     </div>
+
+    @include('partials.account')
 </section>
 
 <section x-show="route.view === 'notifications'" class="space-y-6">

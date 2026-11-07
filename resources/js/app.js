@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs';
+import { accountSettings } from './account.js';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
@@ -101,6 +102,7 @@ async function setLocale(locale) {
 }
 
 Alpine.data('swipeRow', swipeRow);
+Alpine.data('accountSettings', () => accountSettings({ ownerKey: OWNER_KEY }));
 
 // ---------------------------------------------------------------- task states (cached per data change)
 
@@ -1480,7 +1482,10 @@ async function connect() {
     const sync = Alpine.store('sync');
 
     try {
-        sync.user = await api.get('/me');
+        const { notice, ...user } = await api.get('/me');
+        sync.user = user;
+        // Result of linking or a failed confirmation at the provider (OidcController), shown once.
+        if (notice) Alpine.store('notice').show(notice);
     } catch (error) {
         if (isBlocked(error)) {
             block(error.message);

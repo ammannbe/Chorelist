@@ -9,7 +9,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Deletes an account (the account page, and the webhook user.deleted of the AccountManager,
+ * Deletes an account ("Delete account" in the settings, and the webhook user.deleted of the AccountManager,
  * docs/ENTITLEMENTS-API.md 5.2): own lists are deleted for all members, shared ones are left.
  * Completions in other lists stay (without the user), so their ranking keeps its history.
  * Households are left: another member takes over as admin, empty households are deleted
