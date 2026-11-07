@@ -24,6 +24,11 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
      */
     public function update(User $user, array $input): void
     {
+        // A linked account keeps the address it logs in with (read only on the account page); unlinking first.
+        if ($user->isLinkedToOidc()) {
+            $input['email'] = $user->email;
+        }
+
         Validator::make($input, [
             'name' => ['nullable', 'string', 'max:255'],
 

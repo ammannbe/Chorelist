@@ -7,7 +7,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <span class="min-w-0 break-all" x-text="$t('Logged in as :email', { email: $store.sync.user.email })"></span>
                     <button type="button" class="button-secondary shrink-0 whitespace-nowrap" @click="logout()" :disabled="busy" x-text="$t('Log Out')"></button>
-                    <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$t('Name, password, passkeys and deleting the account')"></a>
+                    <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$store.sync.user.linked ? $t('Name and deleting the account') : $t('Name, password, passkeys and deleting the account')"></a>
                 </div>
             </template>
             <template x-if="!loggedIn">

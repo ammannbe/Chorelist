@@ -66,9 +66,9 @@ class AccountManagerHouseholdTest extends TestCase
         });
 
         $this->owner = User::factory()->create(['name' => 'Olivia']);
-        $this->owner->forceFill(['oidc_sub' => 'sub-owner'])->save();
+        $this->owner->forceFill(['oidc_sub' => 'sub-owner', 'password' => null])->save();
         $this->member = User::factory()->create(['name' => 'Max']);
-        $this->member->forceFill(['oidc_sub' => 'sub-member'])->save();
+        $this->member->forceFill(['oidc_sub' => 'sub-member', 'password' => null])->save();
     }
 
     private function snapshot(int $version, array $members = ['sub-owner' => 'admin', 'sub-member' => 'member'], string $name = 'Familie Muster', string $uuid = self::UUID): array
@@ -272,7 +272,7 @@ class AccountManagerHouseholdTest extends TestCase
 
         // A new member who uses the app already gets the list right away.
         $newcomer = User::factory()->create();
-        $newcomer->forceFill(['oidc_sub' => 'sub-newcomer'])->save();
+        $newcomer->forceFill(['oidc_sub' => 'sub-newcomer', 'password' => null])->save();
         $this->webhook('household.member_added', $this->snapshot(5, ['sub-owner' => 'admin', 'sub-member' => 'member', 'sub-newcomer' => 'member']))->assertNoContent();
         $this->assertSame($listId, $this->listDoc($newcomer)['id']);
         $this->assertCount(3, $this->listDoc($this->owner)['members']);
@@ -360,7 +360,11 @@ class AccountManagerHouseholdTest extends TestCase
         $household = $this->mirror($this->snapshot(1));
         $this->sharedList($this->owner, $household);
 
-        $this->actingAs($this->member)->delete('/account/oidc')->assertRedirect('/account');
+        // Unlinking needs the OIDC login, a recent OIDC login and a new password (OidcLinkedAccountTest).
+        config(['login.oidc.enabled' => true]);
+        $this->actingAs($this->member)->withSession(['oidc.signed_in_at' => now()->getTimestamp()])
+            ->delete('/account/oidc', ['password' => 'new-secret-password', 'password_confirmation' => 'new-secret-password'])
+            ->assertRedirect('/account');
 
         $this->assertFalse($household->hasUser($this->member));
         $this->assertSame(['sub-member'], $household->pendingMembers()->pluck('oidc_sub')->all());
