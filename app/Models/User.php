@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Passkeys\Contracts\PasskeyUser;
@@ -32,6 +33,14 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         static::saving(function (User $user): void {
             if ($user->isLinkedToOidc() && $user->password !== null && $user->isDirty(['password', 'oidc_sub'])) {
                 throw new LogicException('An account linked to the OIDC login cannot have a password.');
+            }
+        });
+
+        // A stored entitlements snapshot belongs to the subject it was synced for (versions count per subject).
+        static::updated(function (User $user): void {
+            if ($user->wasChanged('oidc_sub')) {
+                $user->entitlement()->delete();
+                $user->unsetRelation('entitlement');
             }
         });
     }
@@ -98,6 +107,16 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function isAbsentOn(string $date): bool
     {
         return $this->absences()->whereDate('starts_on', '<=', $date)->whereDate('ends_on', '>=', $date)->exists();
+    }
+
+    /**
+     * Last entitlements snapshot of the AccountManager (linked users only, App\Entitlements\Entitlements).
+     *
+     * @return HasOne<UserEntitlement, $this>
+     */
+    public function entitlement(): HasOne
+    {
+        return $this->hasOne(UserEntitlement::class);
     }
 
     public function memberships(): HasMany

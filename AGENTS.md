@@ -85,13 +85,38 @@ Same architecture as Shoppinglist:
 - Contract: AccountManager `docs/HOUSEHOLDS-API.md` (branch/phase 8). Env `ACCOUNT_MANAGER_URL`, `ACCOUNT_MANAGER_SERVICE_KEY`, `ACCOUNT_MANAGER_SECRET` (one secret signs the webhooks and authenticates the API with HTTP Basic), `ACCOUNT_MANAGER_REPORT_SHARES`. Mirroring is active only with the driver and all three values (`AccountManagerHouseholds::enabled()`), otherwise the webhook returns 404.
 - `App\Households\AccountManagerClient` (API: `GET /api/households?sub=`, `GET /api/households/{uuid}`, `PUT …/shares`, `POST/GET /api/households/import`; every failure is `AccountManagerUnavailable`, 404 is an answer), `AccountManagerHouseholds` (applying snapshots), jobs `ApplyAccountManagerEvent`, `ReportAccountManagerShares`.
 - Webhook `POST /api/account-manager/webhook` (`routes/api.php`, no session/CSRF, `throttle:120,1`, `Api\AccountManagerWebhookController`): HMAC-SHA256 over `"{timestamp}.{body}"` (raw body, `X-Account-Manager-Signature`, `X-Account-Manager-Timestamp` max. 300 s off), accepted once per `event_id` (`account_manager_webhook_events`, `model:prune` after 7 days), applied by the queued `ApplyAccountManagerEvent`. Always 204 for duplicates, stale and unknown types.
-- Every event and API answer is a full snapshot: name, members by `oidc_sub` (unknown subjects → `household_pending_members`, attached on the first OIDC login), roles, all other members removed (their own lists are unshared, like leaving). Webhooks apply only `version > account_manager_version`, API answers also `=`. `household.deleted` → `deleteWithShares()` (lists stay with their owners). Events of unknown households are confirmed with `GET /api/households/{uuid}` (404: nothing is created; AccountManager down: the job is retried). After every change `syncLists()`/`touchLists()`, so clients gain or lose lists on the next pull.
+- Every event and API answer is a full snapshot: name, members by `oidc_sub` (unknown subjects → `household_pending_members`, attached on the first OIDC login), roles, all other members removed (their own lists are unshared, like leaving). Webhooks apply only `version > account_manager_version`, API answers always apply (current truth, also with a lower version, e.g. after a backup restore of the AccountManager). `household.deleted` → `deleteWithShares()` (lists stay with their owners). Events of unknown households are confirmed with `GET /api/households/{uuid}` (404: nothing is created; AccountManager down: the job is retried). After every change `syncLists()`/`touchLists()`, so clients gain or lose lists on the next pull.
 - `households:sync` (daily 04:15): `GET /api/households?sub=` for every user with `oidc_sub`, mirrored households nobody listed are checked one by one (404 deletes). The OIDC login (and linking) attaches pending memberships and syncs the user; unlinking moves the user's memberships back to pending. AccountManager down: last state stays, warning in the log, the login works.
 - Shares (optional, `ACCOUNT_MANAGER_REPORT_SHARES`): `ReportAccountManagerShares` sends the lists shared with a mirrored household (`task_list`, list id, icon + name) after sharing/unsharing, renaming or deleting a list and in the daily sync; only changes (`account_manager_shares_hash`), failures are ignored.
 - Switching from `local`: set the driver and the AccountManager values, run `households:import`: proposes the local households without `account_manager_household_uuid` (members with `oidc_sub` only; households without any are skipped). An admin of the AccountManager confirms; the hourly `households:import --check` maps confirmed ones (`account_manager_household_uuid`, name and members from the snapshot, shares stay; if the household is mirrored already the shares move there and the local one is dropped) and marks rejected ones (`account_manager_import_status`, stay local and read only). Members without a linked login lose the household access on confirmation.
 - Back to `local`: mirrored households become ordinary local households (management enabled again, `account_manager_household_uuid`/`account_manager_version` stay, pending members are ignored), shares stay. Switching to `account-manager` again overwrites them with the next newer snapshot.
 - Deleting the account: in mirrored households the user only leaves (no hand-over, the AccountManager decides).
 - UI texts name the AccountManager ("Manage households in “:name”", "Only in this app, not managed in “:name”." …): `App\Households\AccountManagerLabel::get()` = `ACCOUNT_MANAGER_LABEL`, otherwise the `name` (its `APP_NAME`) from the public `ACCOUNT_MANAGER_URL/api/info` (only asked with the account-manager driver; cached a day, a failure 10 minutes), otherwise "Account" («Konto»). The link goes to `AccountManagerHouseholds::portalUrl()` (`households_url` of `/api/info`, otherwise `ACCOUNT_MANAGER_URL/households`). Tests: `AccountManagerLabelTest`.
+
+## Entitlements from the AccountManager
+
+- Contract: AccountManager `docs/ENTITLEMENTS-API.md` (phase 6a), concept 5.3/6. Same design and names as RecipeManager
+  (reference, its `AGENTS.md`) and Shoppinglist (same Fortify/PWA implementation). `config/entitlements.php`: `driver`
+  (`ENTITLEMENTS_DRIVER`, `local` default), `admin_source` (`AUTH_ADMIN_SOURCE`, `local` default), `local.features`
+  (`ENTITLEMENTS_LOCAL_FEATURES`, empty: no feature is gated yet); uses the `ACCOUNT_MANAGER_*` values, the client
+  (`AccountManagerClient::entitlements()`, `GET /api/entitlements/{sub}`, 404 = no access) and the webhook of the households.
+- `App\Entitlements\Entitlements` (static): `has($user, 'key')`, `features()`, `isAdmin()`, `status()`, `allowsAccess()`.
+  Linked users (`oidc_sub`) get the stored snapshot with the account-manager driver, unlinked users the local behaviour.
+  Admin: the app has no admin features; `isAdmin()` is prepared (emergency addresses = admins, `AUTH_ADMIN_SOURCE=
+  account-manager`: the snapshot's flag for linked users) and unused.
+- Storage `user_entitlements` (user_id unique, status, admin, features JSON, version, synced_at), dropped when `oidc_sub`
+  changes; `App\Entitlements\AccountManagerEntitlements`: webhooks apply only `version > stored`, API answers always apply (current truth, also with a lower version, e.g. after a backup restore of the AccountManager), 404 sets
+  `none` (version kept), unknown subjects are ignored (the OIDC login fetches the snapshot, 5 s, failures keep the last state),
+  `entitlements:sync` daily 04:30. The webhook is open with mirrored households or synced entitlements; `entitlements.changed`
+  is applied right away, `user.deleted` queued (`DeleteAccountManagerUser`).
+- Access (driver account-manager): `EnsureEntitlementAccess` (web group) blocks linked users with status `suspended`,
+  `requested` or `none`: JSON requests get 403 `{message, access}` (session kept), pages sign out with «Dein Zugang zu :app ist
+  gesperrt.» / «… ist nicht freigeschaltet.» on the login page; the PWA sets the sync status `blocked`, shows the message and
+  stops syncing (local data stays). The OIDC callback refuses blocked users.
+- `user.deleted` = `App\Services\UserDeletion`, the same code as deleting the account on the account page
+  (`AccountController`): own lists deleted for all members, shared ones left, households left with hand-over (mirrored: only
+  leaving), sessions (database driver), then the user. Removing the access is no deletion (`status: none`).
+- Tests: `AccountManagerEntitlementsTest`.
 
 ## Notifications
 
@@ -133,6 +158,7 @@ Deployment: `.forgejo/workflows/deploy.yml` (same as Shoppinglist, default URL `
 - Local data: `ddev artisan migrate:fresh --seed` (test@example.com and anna@example.com, password `password`, a shared list with chores). Mails: Mailpit (`ddev launch -m`).
 - Reminders: `ddev artisan reminders:send --dry-run`.
 - Households from the AccountManager: `ddev artisan households:sync`, `ddev artisan households:import [--check]`.
+- Entitlements from the AccountManager: `ddev artisan entitlements:sync`.
 
 ## Rules
 
