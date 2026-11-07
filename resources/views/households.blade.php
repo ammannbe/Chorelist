@@ -85,7 +85,7 @@
                                         <noscript><button class="underline">{{ __('Save') }}</button></noscript>
                                     </form>
                                     @unless ($member->is(auth()->user()))
-                                        <form method="POST" action="{{ route('households.members.destroy', [$household, $member]) }}" onsubmit="return confirm(@js(__('Remove :name from the household?', ['name' => $member->displayName()])))">
+                                        <form method="POST" action="{{ route('households.members.destroy', [$household, $member]) }}" onsubmit="return confirm(@js(__('Remove :name from the household? They lose access to everything shared with the household, and their own lists are no longer shared with it (the lists stay with them).', ['name' => $member->displayName()])))">
                                             @csrf
                                             @method('DELETE')
                                             <button class="text-red-700 underline">{{ __('Remove') }}</button>
@@ -150,7 +150,7 @@
 
             @if ($local)
                 <div class="flex flex-wrap gap-4 text-sm">
-                    <form method="POST" action="{{ route('households.members.destroy', [$household, auth()->user()]) }}" onsubmit="return confirm(@js(__('Leave this household?')))">
+                    <form method="POST" action="{{ route('households.members.destroy', [$household, auth()->user()]) }}" onsubmit="return confirm(@js(__('Leave this household? You lose access to everything shared with it, and your own lists are no longer shared with it (the lists stay with you).')))">
                         @csrf
                         @method('DELETE')
                         <button class="text-red-700 underline">{{ __('Leave household') }}</button>
