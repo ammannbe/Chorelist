@@ -18,6 +18,7 @@ Chorelist: offline-first PWA for shared household chores (recurring tasks, remin
 - `completions`: who gets the points (`user_id`, may be another member), who entered it (`entered_by_id`), `occurrence` (start date of the occurrence, null for extra/on demand), `done_on`, `type` done|extra|skipped|postponed|undone, `postponed_to`, `points` (copied from the task, so later changes keep the ranking).
 - `activities`: history of changes written by the server (list/task created/updated/deleted with field changes, members, postponed, taken back). Pull only.
 - `absences`: holidays of a user, visible (without note) to the members of shared lists.
+- Households (`App\Models\Household`, see below): `households` (uuid, name, `konto_household_uuid`), `household_user` (role admin|member, `joined_at`), `household_invitations` (email, `token_hash`, role, `expires_at`, `accepted_at`), shares `task_list_household`. Memberships have `direct` (false: only through a household).
 - Server only: `list_invites` (see invitations below), `reminder_deliveries` (each reminder once, pruned after 120 days), `push_subscriptions` (package table), `users.preferences` (JSON), `users.timezone` (set from the device), `users.ical_token`.
 - Date columns of synced models use `App\Casts\DateOnly` (plain `Y-m-d`; the default date cast would store the millisecond timestamp format of `Syncable`).
 
@@ -52,7 +53,16 @@ Same architecture as Shoppinglist:
 - Data of a list that disappeared (left, removed, deleted) is removed from the device with `removeLocally()` (`resources/js/db/index.js`): the push modifier skips these deletions. Deleted documents are purged after 7 days (RxDB cleanup plugin).
 - Moving a task to another list creates a new task (history stays with the old one); with an unchanged schedule it starts at the next open occurrence.
 - Tasks/completions of lists or tasks unknown to the server return 409, the client retries (created offline, not pushed yet).
-- Sharing, leaving, invitation links, push subscriptions and the calendar link need a connection.
+- Sharing (also with households), leaving, invitation links, push subscriptions and the calendar link need a connection.
+
+## Households
+
+- `HOUSEHOLDS_DRIVER` (`config/households.php`): `local` (default) manages households in the app; `konto` (AccountManager, phase 8 of its concept, not implemented yet) makes the local management read only (403), sharing lists with households stays possible. Same tables and names as RecipeManager and Shoppinglist.
+- Page `/households` (server rendered, `HouseholdController`, needs a connection, linked in the settings): create, rename, delete, invite by email with a role, change roles, remove members, leave. Admins manage, members may leave; the last admin can neither leave nor lose the role (deleting the household is possible). Deleting the account leaves the households: the longest member becomes admin, empty households are deleted.
+- Invitations (`HouseholdInvitationController`, 30 days, only the SHA-256 of the token stored): mail to the address (also without account), accepted only by the user with that verified address, by the link (`/household-invitations/<token>`) or on the households page (`/me` returns the number of open ones). Joining needs a POST.
+- Sharing: the list owner shares with their own households in the list dialog (`POST/DELETE /lists/{list}/households`, activities `household.shared`/`household.unshared`). Every household member has the same access as an individual member.
+- Access is resolved through the household membership and kept as list memberships with `direct = false` (`TaskList::syncHouseholdMembers()`), so sync, notifications, reminders, ranking, absences and the calendar work unchanged. It runs whenever shares or members change (`Household::addUser/removeUser/deleteWithShares`); removed members get the list as deleted document on the next pull, their pushes are ignored like those of any non-member. Removing a member or deleting the household only removes access; a removed member's own lists are no longer shared with the household.
+- Members through a household cannot leave the list or be removed from it (422, a pushed deletion returns the list); they leave the household instead. Removing a direct member who is also in a shared household only clears `direct`. List documents contain `households` ({id: uuid, name}), `direct` and `members[].direct`.
 
 ## Notifications
 

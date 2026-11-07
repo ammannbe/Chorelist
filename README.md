@@ -7,7 +7,7 @@ Offline-first web app (PWA) for shared household chores, similar to the tasks of
 - **History** of who did, skipped, postponed or changed what; missed dates.
 - **Points ranking** per list (optional, per week, month or all time), fair with holidays, and personal suggestions which task is worth doing next.
 - **Works offline**: all lists live on the device and sync in the background as soon as a connection is available.
-- **Share lists**: invite others by email or with an invitation link, changes of all members are merged.
+- **Share lists**: invite others by email or with an invitation link, or share with a household (family, flat) so all its members see the list; changes of all members are merged.
 - **Calendar subscription** (iCal), steps per task, categories, dark mode, data export.
 - **Installable**: add it to the home screen on Android and iOS, no app store needed.
 - **Passkeys**: log in with Face ID, Touch ID, Windows Hello or the device PIN.

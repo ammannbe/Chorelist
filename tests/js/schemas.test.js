@@ -15,4 +15,10 @@ describe('schemas', () => {
             for (let v = 1; v <= version; v++) expect(schemas.migrations[collection]?.[v], `${collection} ${v}`).toBeTypeOf('function');
         }
     });
+
+    it('migrate lists to the household fields', () => {
+        const doc = { id: '0190c1e2-0000-7000-8000-000000000000', name: 'WG', members: [{ email: 'a@example.com' }] };
+        expect(schemas.migrations.lists[1](doc)).toEqual({ ...doc, households: [], direct: true });
+        expect(Object.keys(schemas.lists.properties)).toEqual(expect.arrayContaining(['households', 'direct']));
+    });
 });

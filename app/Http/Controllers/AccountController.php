@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Household;
 use App\Models\TaskList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,8 @@ class AccountController extends Controller
         $request->session()->regenerateToken();
 
         DB::transaction(function () use ($user) {
+            // Another member takes over as admin, empty households are deleted.
+            $user->households()->get()->each(fn (Household $household) => $household->removeUser($user, handOver: true));
             TaskList::where('owner_id', $user->id)->get()->each(function (TaskList $list) {
                 $list->delete();
                 $list->touchForMembers();

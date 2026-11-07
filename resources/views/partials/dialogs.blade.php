@@ -49,14 +49,33 @@
                                 <span x-show="member.name" class="block truncate text-xs text-stone-500" x-text="member.email"></span>
                             </span>
                             <span x-show="member.email === dialogList.owner_email" class="text-xs text-stone-500" x-text="$t('Owner')"></span>
-                            <button type="button" x-show="dialogList.is_owner && member.email !== dialogList.owner_email" class="text-sm text-red-700 underline" @click="removeMember(member.email)" :disabled="busy" x-text="$t('Remove')"></button>
+                            <span x-show="member.direct === false" class="text-xs text-stone-500" x-text="`🏠 ${$t('Household')}`"></span>
+                            <button type="button" x-show="dialogList.is_owner && member.email !== dialogList.owner_email && member.direct !== false" class="text-sm text-red-700 underline" @click="removeMember(member.email)" :disabled="busy" x-text="$t('Remove')"></button>
                         </li>
                     </template>
                 </ul>
 
+                <p x-show="!dialogList.is_owner && dialogList.households?.length" class="text-sm text-stone-600"
+                    x-text="$t('Shared with the household :households.', { households: (dialogList.households ?? []).map((h) => `«${h.name}»`).join(', ') })"></p>
+
                 <template x-if="dialogList.is_owner">
                     <div class="space-y-3">
                         <p x-show="!$store.sync.online" class="notice" x-text="$t('This needs an internet connection.')"></p>
+                        {{-- Share with a household: all its members, also future ones --}}
+                        <div class="space-y-2">
+                            <h4 class="text-sm font-medium text-stone-600" x-text="`🏠 ${$t('Share with household')}`"></h4>
+                            <template x-for="household in myHouseholds" :key="household.id">
+                                <label class="flex cursor-pointer items-center gap-3 rounded-lg border border-stone-200 px-3 py-2">
+                                    <input type="checkbox" class="size-4 accent-sky-700" :checked="isSharedWith(dialogList, household)" :disabled="busy"
+                                        @click.prevent="toggleHousehold(household)">
+                                    <span class="min-w-0 flex-1 truncate" x-text="household.name"></span>
+                                </label>
+                            </template>
+                            <p class="text-xs text-stone-500">
+                                <span x-text="myHouseholds.length ? $t('All members of the household see the list, also the ones joining later.') : $t('No household yet.')"></span>
+                                <a href="/households" data-online class="underline" x-text="$t('Manage households')"></a>
+                            </p>
+                        </div>
                         <form @submit.prevent="share()" class="flex gap-2">
                             <input x-model="shareEmail" type="email" class="field min-w-0 flex-1" required autocomplete="email" :placeholder="$t('Invite by email')" :aria-label="$t('Invite by email')">
                             <button class="button" :disabled="busy" x-text="$t('Invite')"></button>
@@ -86,7 +105,9 @@
 
             <div class="flex justify-start border-t border-stone-200 pt-4 text-sm">
                 <button type="button" x-show="dialogList.is_owner !== false" class="text-red-700 underline" @click="deleteList(dialogList.id)" x-text="$t('Delete list')"></button>
-                <button type="button" x-show="dialogList.is_owner === false" class="text-red-700 underline" @click="leaveList(dialogList.id)" x-text="$t('Leave list')"></button>
+                <button type="button" x-show="dialogList.is_owner === false && !householdOf(dialogList)" class="text-red-700 underline" @click="leaveList(dialogList.id)" x-text="$t('Leave list')"></button>
+                <p x-show="dialogList.is_owner === false && householdOf(dialogList)" class="text-stone-500"
+                    x-text="$t('You see this list through the household “:household”. To leave it, leave the household.', { household: householdOf(dialogList)?.name ?? '' })"></p>
             </div>
         </div>
     </template>
