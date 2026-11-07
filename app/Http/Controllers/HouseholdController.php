@@ -9,11 +9,10 @@ use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
- * Households page (server rendered, needs a connection): create, rename and delete households,
- * change roles, remove members and leave. Admins manage the household, members may leave it.
+ * Households page (server rendered, needs a connection): all households of the user with their
+ * details (each one collapsible); create, rename and delete households. Members: HouseholdMemberController.
  * Read only with HOUSEHOLDS_DRIVER=account-manager: households are managed in the AccountManager and mirrored.
  */
 class HouseholdController extends Controller
@@ -22,13 +21,19 @@ class HouseholdController extends Controller
     {
         $user = $request->user();
 
-        return view('households', [
+        return view('households.index', [
             'households' => $user->households()
-                ->with(['users' => fn ($query) => $query->orderBy('name')->orderBy('email'), 'taskLists', 'invitations' => fn ($query) => $query->open()->orderBy('email')])
+                ->with([
+                    'users' => fn ($query) => $query->orderBy('name')->orderBy('email'),
+                    'taskLists' => fn ($query) => $query->with('owner')->orderBy('name'),
+                    'invitations' => fn ($query) => $query->open()->orderBy('email'),
+                ])
                 ->withCount('pendingMembers')
                 ->orderBy('name')
                 ->get(),
             'invitations' => $user->householdInvitations()->with(['household', 'inviter'])->get(),
+            // Opened household: after an action, or a form that failed validation.
+            'open' => $request->session()->get('household', $request->old('_household')),
             'local' => Household::managedLocally(),
             'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),
         ]);
@@ -42,7 +47,17 @@ class HouseholdController extends Controller
         $household = Household::create(['name' => $name, 'created_by' => $request->user()->id]);
         $household->addUser($request->user(), Household::ADMIN);
 
-        return $this->back(__('Household created.'));
+        return $this->toHousehold($household, __('Household created.'));
+    }
+
+    /**
+     * Links to a household: the households page with it opened.
+     */
+    public function show(Request $request, Household $household): RedirectResponse
+    {
+        abort_unless($household->hasUser($request->user()), 404);
+
+        return $this->toHousehold($household);
     }
 
     public function update(Request $request, Household $household): RedirectResponse
@@ -53,7 +68,7 @@ class HouseholdController extends Controller
         $household->update(['name' => $this->validateName($request)]);
         $household->touchLists();
 
-        return $this->back(__('Saved.'));
+        return $this->toHousehold($household, __('Saved.'));
     }
 
     public function destroy(Request $request, Household $household): RedirectResponse
@@ -63,42 +78,7 @@ class HouseholdController extends Controller
 
         $household->deleteWithShares();
 
-        return $this->back(__('Household deleted.'));
-    }
-
-    public function updateMember(Request $request, Household $household, User $member): RedirectResponse
-    {
-        $this->ensureLocal();
-        $this->ensureAdmin($request->user(), $household);
-        abort_unless($household->hasUser($member), 404);
-
-        $role = $request->validate(['role' => ['required', Rule::in(Household::ROLES)]])['role'];
-        if ($role !== Household::ADMIN && $household->isLastAdmin($member)) {
-            return $this->back(error: __('A household needs at least one admin.'));
-        }
-        $household->setRole($member, $role);
-
-        return $this->back(__('Saved.'));
-    }
-
-    /**
-     * Admins remove members, members leave.
-     */
-    public function destroyMember(Request $request, Household $household, User $member): RedirectResponse
-    {
-        $this->ensureLocal();
-        $self = $member->is($request->user());
-        if (! $self) {
-            $this->ensureAdmin($request->user(), $household);
-        }
-        abort_unless($household->hasUser($member), 404);
-
-        if ($household->isLastAdmin($member)) {
-            return $this->back(error: __('A household needs at least one admin. Make another member admin first, or delete the household.'));
-        }
-        $household->removeUser($member);
-
-        return $this->back($self ? __('You left the household.') : __('Member removed.'));
+        return $this->toHousehold(null, __('Household deleted.'));
     }
 
     private function validateName(Request $request): string
@@ -116,12 +96,5 @@ class HouseholdController extends Controller
         // Not found for non-members, so nobody learns which households exist.
         abort_unless($household->hasUser($user), 404);
         abort_unless($household->isAdmin($user), 403);
-    }
-
-    private function back(?string $status = null, ?string $error = null): RedirectResponse
-    {
-        $redirect = redirect()->route('households.index');
-
-        return $error !== null ? $redirect->withErrors(['household' => $error]) : $redirect->with('status', $status);
     }
 }

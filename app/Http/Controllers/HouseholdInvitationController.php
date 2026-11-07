@@ -34,7 +34,7 @@ class HouseholdInvitationController extends Controller
 
         $existing = User::firstWhere('email', $email);
         if ($existing !== null && $household->hasUser($existing)) {
-            return redirect()->route('households.index')->withErrors(['household' => __(':email is already a member.', ['email' => $email])]);
+            return $this->toHousehold($household, error: __(':email is already a member.', ['email' => $email]));
         }
 
         [, $token] = HouseholdInvitation::issue($household, $request->user(), $email, $validated['role'] ?? Household::MEMBER);
@@ -43,7 +43,7 @@ class HouseholdInvitationController extends Controller
                 ->locale($existing?->locale ?? $request->user()->locale ?? app()->getLocale()),
         );
 
-        return redirect()->route('households.index')->with('status', __('Invitation sent to :email.', ['email' => $email]));
+        return $this->toHousehold($household, __('Invitation sent to :email.', ['email' => $email]));
     }
 
     /**
@@ -58,7 +58,7 @@ class HouseholdInvitationController extends Controller
 
         $invitation->delete();
 
-        return redirect()->route('households.index')->with('status', __('Invitation revoked.'));
+        return $this->toHousehold($household, __('Invitation withdrawn.'));
     }
 
     /**
@@ -71,10 +71,10 @@ class HouseholdInvitationController extends Controller
             return redirect()->route('households.index')->withErrors(['household' => __('This invitation is invalid or has expired.')]);
         }
         if ($invitation->household->hasUser($request->user())) {
-            return redirect()->route('households.index');
+            return $this->toHousehold($invitation->household);
         }
 
-        return view('household-invitation', ['invitation' => $invitation, 'token' => $token, 'local' => Household::managedLocally()]);
+        return view('households.invitation', ['invitation' => $invitation, 'token' => $token, 'local' => Household::managedLocally()]);
     }
 
     public function acceptToken(Request $request, string $token): RedirectResponse
@@ -111,7 +111,7 @@ class HouseholdInvitationController extends Controller
 
         $invitation->accept($request->user());
 
-        return redirect()->route('households.index')->with('status', __('You joined the household ":household".', ['household' => $invitation->household->name]));
+        return $this->toHousehold($invitation->household, __('You joined the household ":household".', ['household' => $invitation->household->name]));
     }
 
     private function ensureLocal(): void

@@ -128,7 +128,7 @@ class HouseholdTest extends TestCase
         $task = $this->pull($member, 'tasks')->json('documents.0');
         Carbon::setTestNow(now()->addMinute());
 
-        $this->actingAs($owner)->delete("/households/{$household->uuid}/members/{$member->id}")->assertRedirect('/households');
+        $this->actingAs($owner)->delete("/households/{$household->uuid}/members/{$member->id}")->assertRedirect("/households#household-{$household->uuid}");
 
         // The next pull removes the list from the device.
         $this->assertTrue($this->pull($member, 'lists', $checkpoint)->json('documents.0._deleted'));
@@ -267,8 +267,8 @@ class HouseholdTest extends TestCase
         $checkpoint = $this->pull($member, 'lists')->json('checkpoint');
         Carbon::setTestNow(now()->addMinute());
 
-        $this->actingAs($member)->put("/households/{$household->uuid}", ['name' => 'WG'])->assertForbidden();
-        $this->actingAs($owner)->put("/households/{$household->uuid}", ['name' => 'WG'])->assertRedirect('/households');
+        $this->actingAs($member)->patch("/households/{$household->uuid}", ['name' => 'WG'])->assertForbidden();
+        $this->actingAs($owner)->patch("/households/{$household->uuid}", ['name' => 'WG'])->assertRedirect("/households#household-{$household->uuid}");
 
         $this->assertSame('WG', $this->pull($member, 'lists', $checkpoint)->json('documents.0.households.0.name'));
     }
@@ -280,14 +280,14 @@ class HouseholdTest extends TestCase
         $household = $this->household($admin, $member);
 
         $this->actingAs($admin)->delete("/households/{$household->uuid}/members/{$admin->id}")->assertSessionHasErrors('household');
-        $this->actingAs($admin)->put("/households/{$household->uuid}/members/{$admin->id}", ['role' => 'member'])->assertSessionHasErrors('household');
+        $this->actingAs($admin)->patch("/households/{$household->uuid}/members/{$admin->id}", ['role' => 'member'])->assertSessionHasErrors('household');
         $this->assertTrue($household->isAdmin($admin));
 
         // Members cannot change roles or remove others.
-        $this->actingAs($member)->put("/households/{$household->uuid}/members/{$member->id}", ['role' => 'admin'])->assertForbidden();
+        $this->actingAs($member)->patch("/households/{$household->uuid}/members/{$member->id}", ['role' => 'admin'])->assertForbidden();
         $this->actingAs($member)->delete("/households/{$household->uuid}/members/{$admin->id}")->assertForbidden();
 
-        $this->actingAs($admin)->put("/households/{$household->uuid}/members/{$member->id}", ['role' => 'admin'])->assertSessionHasNoErrors();
+        $this->actingAs($admin)->patch("/households/{$household->uuid}/members/{$member->id}", ['role' => 'admin'])->assertSessionHasNoErrors();
         $this->actingAs($admin)->delete("/households/{$household->uuid}/members/{$admin->id}")->assertSessionHasNoErrors();
         $this->assertFalse($household->hasUser($admin));
         $this->assertTrue($household->isAdmin($member));
@@ -297,9 +297,10 @@ class HouseholdTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)->post('/households', ['name' => ' Familie Muster '])->assertRedirect('/households');
+        $response = $this->actingAs($user)->post('/households', ['name' => ' Familie Muster ']);
 
         $household = Household::firstOrFail();
+        $response->assertRedirect("/households#household-{$household->uuid}");
         $this->assertSame('Familie Muster', $household->name);
         $this->assertTrue($household->isAdmin($user));
         $this->actingAs($user)->get('/households')->assertOk()->assertSee('Familie Muster');
@@ -307,7 +308,35 @@ class HouseholdTest extends TestCase
 
         // Non-members do not see it.
         $this->actingAs(User::factory()->create())->get('/households')->assertOk()->assertDontSee('Familie Muster');
-        $this->actingAs(User::factory()->create())->put("/households/{$household->uuid}", ['name' => 'X'])->assertNotFound();
+        $this->actingAs(User::factory()->create())->patch("/households/{$household->uuid}", ['name' => 'X'])->assertNotFound();
+    }
+
+    public function test_the_households_page_shows_every_household_with_its_details(): void
+    {
+        [$owner, $member, , $household] = $this->shared();
+        $other = Household::create(['name' => 'Zweiter Haushalt', 'created_by' => $owner->id]);
+        $other->addUser($owner, Household::ADMIN);
+        $opened = fn (Household $household) => '/<details id="household-'.$household->uuid.'"[^>]*\sopen>/';
+
+        // Links to a household open it on the page (non-members: not found).
+        $this->actingAs(User::factory()->create())->get("/households/{$household->uuid}")->assertNotFound();
+        $this->actingAs($owner)->get("/households/{$household->uuid}")
+            ->assertRedirect("/households#household-{$household->uuid}")->assertSessionHas('household', $household->uuid);
+        $page = $this->get('/households')->assertOk()
+            ->assertSee($member->email)->assertSee('Zweiter Haushalt')
+            ->assertSee(route('households.invitations.store', $household))
+            ->getContent();
+        $this->assertMatchesRegularExpression($opened($household), $page);
+        $this->assertDoesNotMatchRegularExpression($opened($other), $page);
+
+        // A failed form opens its household again.
+        $this->from('/households')->post("/households/{$other->uuid}/invitations", ['_household' => $other->uuid, 'email' => 'no-email'])
+            ->assertRedirect('/households')->assertSessionHasErrors('email');
+        $this->assertMatchesRegularExpression($opened($other), $this->get('/households')->getContent());
+
+        // Members see the household without the management.
+        $this->actingAs($member)->get('/households')->assertOk()->assertSee('Familie Muster')
+            ->assertDontSee(route('households.invitations.store', $household))->assertDontSee(__('Delete household'));
     }
 
     public function test_invitations_are_accepted_by_the_invited_address(): void
@@ -317,7 +346,7 @@ class HouseholdTest extends TestCase
         $invitee = User::factory()->create(['email' => 'anna@example.com']);
 
         $this->actingAs($owner)->post("/households/{$household->uuid}/invitations", ['email' => 'Anna@Example.com'])
-            ->assertRedirect('/households')->assertSessionHas('status');
+            ->assertRedirect("/households#household-{$household->uuid}")->assertSessionHas('status');
 
         $path = null;
         Notification::assertSentOnDemand(HouseholdInvited::class, function (HouseholdInvited $notification, array $channels, AnonymousNotifiable $notifiable) use (&$path) {
@@ -333,7 +362,7 @@ class HouseholdTest extends TestCase
         $this->assertFalse($household->hasUser($outsider));
 
         $this->actingAs($invitee)->get($path)->assertOk()->assertSee('Familie Muster');
-        $this->actingAs($invitee)->post($path)->assertRedirect('/households');
+        $this->actingAs($invitee)->post($path)->assertRedirect("/households#household-{$household->uuid}");
         $this->assertSame(Household::MEMBER, $household->roleOf($invitee));
         $this->assertSame($listId, $this->listDoc($invitee)['id']);
 
@@ -401,10 +430,10 @@ class HouseholdTest extends TestCase
         config(['households.driver' => 'account-manager']);
 
         $this->actingAs($owner)->post('/households', ['name' => 'Neu'])->assertForbidden();
-        $this->actingAs($owner)->put("/households/{$household->uuid}", ['name' => 'Neu'])->assertForbidden();
+        $this->actingAs($owner)->patch("/households/{$household->uuid}", ['name' => 'Neu'])->assertForbidden();
         $this->actingAs($owner)->delete("/households/{$household->uuid}")->assertForbidden();
         $this->actingAs($owner)->post("/households/{$household->uuid}/invitations", ['email' => 'x@example.com'])->assertForbidden();
-        $this->actingAs($owner)->put("/households/{$household->uuid}/members/{$member->id}", ['role' => 'admin'])->assertForbidden();
+        $this->actingAs($owner)->patch("/households/{$household->uuid}/members/{$member->id}", ['role' => 'admin'])->assertForbidden();
         $this->actingAs($owner)->delete("/households/{$household->uuid}/members/{$member->id}")->assertForbidden();
         $this->actingAs($member)->delete("/households/{$household->uuid}/members/{$member->id}")->assertForbidden();
         $this->actingAs(User::factory()->create(['email' => 'neu@example.com']))->post("/household-invitations/{$token}")->assertForbidden();

@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Auth\OidcController;
 use App\Http\Controllers\HouseholdController;
 use App\Http\Controllers\HouseholdInvitationController;
+use App\Http\Controllers\HouseholdMemberController;
 use App\Http\Controllers\IcalController;
 use App\Http\Controllers\InviteController;
 use App\Http\Controllers\ListHouseholdController;
@@ -77,10 +78,11 @@ Route::middleware('auth')->group(function () {
         // Households (server rendered, config/households.php).
         Route::get('households', [HouseholdController::class, 'index'])->name('households.index');
         Route::post('households', [HouseholdController::class, 'store'])->middleware('throttle:20,1')->name('households.store');
-        Route::put('households/{household}', [HouseholdController::class, 'update'])->name('households.update');
+        Route::get('households/{household}', [HouseholdController::class, 'show'])->name('households.show');
+        Route::patch('households/{household}', [HouseholdController::class, 'update'])->name('households.update');
         Route::delete('households/{household}', [HouseholdController::class, 'destroy'])->name('households.destroy');
-        Route::put('households/{household}/members/{member}', [HouseholdController::class, 'updateMember'])->name('households.members.update');
-        Route::delete('households/{household}/members/{member}', [HouseholdController::class, 'destroyMember'])->name('households.members.destroy');
+        Route::patch('households/{household}/members/{member}', [HouseholdMemberController::class, 'update'])->name('households.members.update');
+        Route::delete('households/{household}/members/{member}', [HouseholdMemberController::class, 'destroy'])->name('households.members.destroy');
         Route::post('households/{household}/invitations', [HouseholdInvitationController::class, 'store'])->middleware('throttle:20,1')->name('households.invitations.store');
         Route::delete('households/{household}/invitations/{invitation}', [HouseholdInvitationController::class, 'destroy'])->name('households.invitations.destroy');
         // Invitations for the user: link in the mail, or from the households page.

@@ -103,7 +103,7 @@ class AccountManagerLabelTest extends TestCase
     public function test_the_households_page_names_the_account_manager(): void
     {
         $this->actingAs(User::factory()->create(['locale' => 'de_CH']))->get('/households')->assertOk()
-            ->assertSee('Haushalte werden im «Narrenhaus-Konto» verwaltet. Hier siehst du sie nur.')
+            ->assertSee('Haushalte werden im «Narrenhaus-Konto» verwaltet. Hier kannst du sie nur ansehen.')
             ->assertSee('<a class="underline" href="https://konto.example.com/households">Haushalte im «Narrenhaus-Konto» verwalten</a>', false);
     }
 }
