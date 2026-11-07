@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{ config('app.name') }}</title>
+    {{-- APP_NAME for the client translations (:app), resources/js/i18n.js --}}
+    <meta name="application-name" content="{{ config('app.name') }}">
     <meta name="theme-color" content="#0369a1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -25,7 +27,7 @@
             <h1 class="min-w-0 flex-1 truncate text-lg font-semibold">
                 <span x-show="['home', 'lists'].includes(route.view)" class="flex items-center gap-2">
                     <img src="/favicon-96x96.png" alt="" class="size-7 rounded-md">
-                    <span>Chorelist</span>
+                    <span>{{ config('app.name') }}</span>
                 </span>
                 <span x-show="route.view === 'list' || route.view === 'history' || route.view === 'stats'" class="block truncate"
                     x-text="list ? `${list.icon ? list.icon + ' ' : ''}${list.name}` : ''"></span>
@@ -63,7 +65,7 @@
                 }[$store.sync.status]"></span>
             </span>
 
-            <button type="button" x-show="list && route.view === 'list'" class="icon-button" :aria-label="$t('List settings')" @click="openListDialog()">
+            <button type="button" x-show="list && route.view === 'list'" class="icon-button" :aria-label="$t('Edit list')" @click="openListDialog()">
                 <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
             </button>
             <a href="#/settings" x-show="['home', 'lists', 'list'].includes(route.view)" class="icon-button" :aria-label="$t('Settings')">
@@ -106,7 +108,7 @@
         <section x-show="route.view === 'home'" class="space-y-6">
             <template x-if="!lists.length">
                 <div class="space-y-3 py-6 text-center">
-                    <p class="text-lg font-semibold" x-text="$t('Welcome to Chorelist!')"></p>
+                    <p class="text-lg font-semibold" x-text="$t('Welcome to :app!')"></p>
                     <p class="text-stone-600" x-text="$t('Create a list for your household, add the chores and share the list with your flatmates or family.')"></p>
                     <div class="flex flex-wrap justify-center gap-2">
                         <a href="#/lists" class="button inline-block" x-text="$t('Create a list')"></a>
@@ -220,7 +222,7 @@
                     <div class="flex flex-wrap gap-2 text-sm">
                         <a :href="`#/history/${list.id}`" class="chip" x-text="`🕘 ${$t('History')}`"></a>
                         <a :href="`#/stats/${list.id}`" class="chip" x-text="`📊 ${$t('Statistics')}`"></a>
-                        <button type="button" class="chip" @click="openListDialog()" x-text="loggedIn && list.is_owner ? `👥 ${$t('Share')}` : `⚙️ ${$t('Settings')}`"></button>
+                        <button type="button" x-show="loggedIn" class="chip" @click="openListDialog(list, 'share')" x-text="`👥 ${list.is_owner ? $t('Share') : $t('Members')}`"></button>
                     </div>
 
                     {{-- Filter by category (this device) --}}
@@ -485,7 +487,7 @@
     {{-- First visit: install hint for the current platform --}}
     <div x-show="$store.install.showHint && route.view === 'home' && !$store.undo.toast && !$store.notice.text" x-transition
         class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
-        <p class="mb-1 font-semibold" x-text="$t('Install Chorelist as an app')"></p>
+        <p class="mb-1 font-semibold" x-text="$t('Install :app as an app')"></p>
         <p x-show="$store.install.prompt" x-text="$t('Works offline, starts from your home screen and can send push reminders.')"></p>
         <p x-show="!$store.install.prompt" x-text="$t($store.install.current.steps[0]) + ' ' + ($store.install.current.steps[1] ? $t($store.install.current.steps[1]) : '')"></p>
         <p class="mt-2 text-xs text-stone-300" x-text="$t('You can find these instructions in the settings at any time.')"></p>

@@ -1,9 +1,9 @@
-{{-- List settings: name, icon, ranking (owner), muting (personal), members and invitations. --}}
+{{-- List dialog. Edit: name, icon, ranking (owner), muting (personal). Share: members and invitations (owner), members (others). --}}
 <dialog x-ref="listDialog" class="dialog" @close="listDialog = null">
     <template x-if="listDialog && dialogList">
         <div class="space-y-5">
-            <form @submit.prevent="saveList()" class="space-y-4">
-                <h2 class="text-lg font-semibold" x-text="$t('List settings')"></h2>
+            <form x-show="listDialog.mode === 'edit'" @submit.prevent="saveList()" class="space-y-4">
+                <h2 class="text-lg font-semibold" x-text="$t('Edit list')"></h2>
                 <template x-if="dialogList.is_owner !== false">
                     <div class="space-y-4">
                         <div class="flex gap-2">
@@ -39,8 +39,8 @@
             </form>
 
             {{-- Members (sharing needs a connection) --}}
-            <div x-show="loggedIn" class="space-y-3 border-t border-stone-200 pt-4">
-                <h3 class="font-semibold" x-text="$t('Members')"></h3>
+            <div x-show="listDialog.mode === 'share' && loggedIn" class="space-y-3">
+                <h2 class="text-lg font-semibold" x-text="dialogList.is_owner ? $t('Share list') : $t('Members')"></h2>
                 <ul class="divide-y divide-stone-200 rounded-lg border border-stone-200">
                     <template x-for="member in dialogList.members" :key="member.email">
                         <li class="flex items-center justify-between gap-2 px-3 py-2">
@@ -97,13 +97,12 @@
                     </div>
                 </template>
                 <p x-show="shareError" class="text-sm text-red-700" x-text="shareError"></p>
+                <div class="flex justify-end">
+                    <button type="button" class="button-secondary" @click="$refs.listDialog.close()" x-text="$t('Close')"></button>
+                </div>
             </div>
 
-            <div class="border-t border-stone-200 pt-4">
-                <button type="button" class="button-secondary w-full" @click="openTemplateDialog(dialogList.id)" x-text="`📋 ${$t('Import tasks from a template')}`"></button>
-            </div>
-
-            <div class="flex justify-start border-t border-stone-200 pt-4 text-sm">
+            <div x-show="listDialog.mode === 'edit'" class="flex justify-start border-t border-stone-200 pt-4 text-sm">
                 <button type="button" x-show="dialogList.is_owner !== false" class="text-red-700 underline" @click="deleteList(dialogList.id)" x-text="$t('Delete list')"></button>
                 <button type="button" x-show="dialogList.is_owner === false && !householdOf(dialogList)" class="text-red-700 underline" @click="leaveList(dialogList.id)" x-text="$t('Leave list')"></button>
                 <p x-show="dialogList.is_owner === false && householdOf(dialogList)" class="text-stone-500"

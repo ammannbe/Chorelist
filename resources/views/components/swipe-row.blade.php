@@ -3,14 +3,14 @@
 {{--
     List row with actions: touch swipe left or long press (user setting, resources/js/swipe.js),
     a "…" menu (mouse: visible on hover, keyboard: on focus) and the right-click menu.
-    $actions: JS expression returning [{ label, run, danger? }].
+    $actions: JS expression returning [{ label, run, icon?, danger?, online?, menuOnly? }] (menuOnly: not among the swipe buttons).
 --}}
 <li x-data="swipeRow" {{ $attributes->merge(['class' => 'group relative overflow-hidden bg-white']) }} :class="lifted && 'z-10 shadow-[0_12px_32px_rgba(0,0,0,0.3)]'"
     @pointerdown.window="open && !$root.contains($event.target) && close()"
     @row-menu="openMenu($el, {{ $actions }})">
     <div x-ref="actions" aria-hidden="true" class="absolute inset-y-0 right-0 flex overflow-hidden" :style="actionsStyle"
         :class="dragging || 'transition-[width] duration-200 motion-reduce:transition-none'">
-        <template x-for="action in {{ $actions }}" :key="action.label">
+        <template x-for="action in ({{ $actions }}).filter((action) => !action.menuOnly)" :key="action.label">
             <button type="button" tabindex="-1" class="flex w-16 items-center text-white" :title="action.label" :aria-label="action.label"
                 :class="['shrink-0 justify-center', action.danger ? 'grow bg-red-600' : action.icon === 'check' ? 'bg-sky-700' : action.icon === 'postpone' ? 'bg-amber-600' : 'bg-stone-500', action.online && !$store.sync.online && 'opacity-50']"
                 @click="act(action.run)">

@@ -52,7 +52,7 @@ class WeeklySummary extends ChoreNotification
             }
         }
 
-        return $mail->action(__('Open Chorelist'), url($this->path()))
+        return $mail->action(__('Open :app', ['app' => config('app.name')]), url($this->path()))
             ->salutation(__('Change which notifications you get in the settings of the app.'));
     }
 }

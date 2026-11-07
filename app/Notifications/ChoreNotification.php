@@ -49,7 +49,7 @@ abstract class ChoreNotification extends Notification implements ShouldQueue
         return (new MailMessage)
             ->subject($this->title())
             ->line($this->body())
-            ->action(__('Open Chorelist'), url($this->path()))
+            ->action(__('Open :app', ['app' => config('app.name')]), url($this->path()))
             ->salutation(__('Change which notifications you get in the settings of the app.'));
     }
 

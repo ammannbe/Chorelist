@@ -4,7 +4,7 @@ import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
 import { createDatabase, removeDatabase, removeLocally, startReplication } from './db/index.js';
 import { compareBy, nextPosition, normalizeName, uuid7 } from './helpers.js';
-import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
+import { APP_NAME, hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { createInstallStore } from './install.js';
 import { closeLayersOnBack } from './layers.js';
 import { applyTheme, createPrefsStore } from './prefs.js';
@@ -416,7 +416,14 @@ Alpine.data('chorelist', () => ({
 
     listActions(list) {
         return [
-            { label: this.$t('Settings'), icon: 'edit', run: () => this.openListDialog(list) },
+            { label: this.$t('Edit'), icon: 'edit', run: () => this.openListDialog(list) },
+            // Owners share, members see who else is on the list (both need a login).
+            ...(this.loggedIn ? [list.is_owner === false
+                ? { label: this.$t('Members'), icon: 'share', run: () => this.openListDialog(list, 'share') }
+                : { label: this.$t('Share'), icon: 'share', online: true, run: () => this.openListDialog(list, 'share') }] : []),
+            // Menu only: the swipe row keeps the frequent actions.
+            { label: this.$t('History'), menuOnly: true, run: () => { location.hash = `#/history/${list.id}`; } },
+            { label: this.$t('Statistics'), menuOnly: true, run: () => { location.hash = `#/stats/${list.id}`; } },
             ...(list.is_owner === false
                 // Members through a household leave the household instead.
                 ? (this.householdOf(list) ? [] : [{ label: this.$t('Leave list'), icon: 'leave', danger: true, online: true, run: () => this.leaveList(list.id) }])
@@ -572,9 +579,11 @@ Alpine.data('chorelist', () => ({
         Alpine.store('notice').show(tasks.length === 1 ? this.$t('1 task added.') : this.$t(':count tasks added.', { count: tasks.length }));
     },
 
-    openListDialog(list = this.list) {
+    /** mode: 'edit' (name, icon, ranking, muting) or 'share' (members and invitations). */
+    openListDialog(list = this.list, mode = 'edit') {
+        if (mode === 'share' && list.is_owner !== false && !this.requireOnline()) return;
         this.listDialog = {
-            id: list.id, name: list.name, icon: list.icon ?? '', ranking_enabled: list.ranking_enabled, ranking_period: list.ranking_period, muted: list.muted,
+            mode, id: list.id, name: list.name, icon: list.icon ?? '', ranking_enabled: list.ranking_enabled, ranking_period: list.ranking_period, muted: list.muted,
         };
         this.shareEmail = '';
         this.shareError = null;
@@ -674,7 +683,7 @@ Alpine.data('chorelist', () => ({
         const text = this.$t('Join my task list “:list”:', { list: this.dialogList?.name ?? '' });
         if (navigator.share) {
             try {
-                await navigator.share({ title: 'Chorelist', text, url: this.inviteLink });
+                await navigator.share({ title: APP_NAME, text, url: this.inviteLink });
                 return;
             } catch {
                 // Cancelled or not allowed: copy instead.
