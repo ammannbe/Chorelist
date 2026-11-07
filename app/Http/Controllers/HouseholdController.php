@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Households\AccountManagerHouseholds;
+use App\Households\AccountManagerLabel;
 use App\Models\Household;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -28,7 +30,7 @@ class HouseholdController extends Controller
                 ->get(),
             'invitations' => $user->householdInvitations()->with(['household', 'inviter'])->get(),
             'local' => Household::managedLocally(),
-            'accountManagerUrl' => filled(config('households.account_manager.url')) ? rtrim((string) config('households.account_manager.url'), '/').'/households' : null,
+            'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),
         ]);
     }
 
@@ -106,7 +108,7 @@ class HouseholdController extends Controller
 
     private function ensureLocal(): void
     {
-        abort_unless(Household::managedLocally(), 403, __('Households are managed in your account.'));
+        abort_unless(Household::managedLocally(), 403, __('Households are managed in “:name”.', ['name' => AccountManagerLabel::get()]));
     }
 
     private function ensureAdmin(User $user, Household $household): void

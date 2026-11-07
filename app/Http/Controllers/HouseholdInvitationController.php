@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Households\AccountManagerLabel;
 use App\Models\Household;
 use App\Models\HouseholdInvitation;
 use App\Models\User;
@@ -115,6 +116,6 @@ class HouseholdInvitationController extends Controller
 
     private function ensureLocal(): void
     {
-        abort_unless(Household::managedLocally(), 403, __('Households are managed in your account.'));
+        abort_unless(Household::managedLocally(), 403, __('Households are managed in “:name”.', ['name' => AccountManagerLabel::get()]));
     }
 }
