@@ -112,6 +112,8 @@ Same architecture as Shoppinglist:
 - Statistics (`#/stats/<id>`): ranking per period, points per week (8 weeks), per task done/missed in 90 days.
 - Holidays (`#/absences`), calendar subscription (`/ical/<user id>-<HMAC>.ics`, derived from `users.ical_token` and the app key: VEVENTs from start to due date for 180 days, because calendar apps ignore VTODOs in subscriptions), invitations (`list_invites`, only the SHA-256 of the token stored): links for anybody (7 days) and personal ones (30 days) for existing verified users the owner shares with by email; `/invite/<token>` shows list, owner and what members see, joining needs a POST (confirmation). Unknown and unverified addresses are added right away and get a link to choose a password. Sharing and links are throttled, JSON export (client only), dark mode (class `dark`, palette swap in `resources/css/app.css`), category filter per list (device only).
 
+- Easter egg: "All rights reserved." in the mail footer (published `resources/views/vendor/mail/{html,text}/message.blade.php`, nothing else of the mail views) links to `<ACCOUNT_MANAGER_URL>/easter-egg` (the page and the video live only in the AccountManager) via `App\Support\EasterEgg::url()`; without `ACCOUNT_MANAGER_URL` it stays plain text. Tests: `EasterEggMailTest`.
+
 ## Translations
 
 - Languages: `de_CH` (default, Swiss spelling "ss", informal "du") and `en`; keys are the English texts.
