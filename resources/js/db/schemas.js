@@ -9,7 +9,7 @@ const syncFields = {
 };
 
 export const lists = {
-    version: 0,
+    version: 1,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -21,12 +21,20 @@ export const lists = {
         ranking_period: { type: 'string', default: 'month' },
         owner_email: { type: ['string', 'null'] },
         is_owner: { type: 'boolean', default: true },
-        // All members, the user included: { email, name }.
+        // All members, the user included: { email, name, direct } (direct false: only through a household).
         members: {
             type: 'array',
             default: [],
-            items: { type: 'object', properties: { email: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['email'] },
+            items: { type: 'object', properties: { email: { type: 'string' }, name: { type: ['string', 'null'] }, direct: { type: 'boolean' } }, required: ['email'] },
         },
+        // Households the list is shared with: { id (uuid), name }.
+        households: {
+            type: 'array',
+            default: [],
+            items: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' } }, required: ['id', 'name'] },
+        },
+        // False: the user is a member only through a household.
+        direct: { type: 'boolean', default: true },
         // Personal: manual order (null: sorted by name after the positioned lists), no notifications.
         position: { type: ['number', 'null'] },
         muted: { type: 'boolean', default: false },
@@ -130,4 +138,9 @@ export const absences = {
 };
 
 // Schema migrations of the local documents, keyed by collection and schema version.
-export const migrations = {};
+export const migrations = {
+    lists: {
+        // Households (filled by the next pull, see REPLICATION_RUNS).
+        1: (doc) => ({ ...doc, households: [], direct: true }),
+    },
+};

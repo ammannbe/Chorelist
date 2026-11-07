@@ -415,9 +415,10 @@ Alpine.data('chorelist', () => ({
     listActions(list) {
         return [
             { label: this.$t('Settings'), icon: 'edit', run: () => this.openListDialog(list) },
-            list.is_owner === false
-                ? { label: this.$t('Leave list'), icon: 'leave', danger: true, online: true, run: () => this.leaveList(list.id) }
-                : { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteList(list.id) },
+            ...(list.is_owner === false
+                // Members through a household leave the household instead.
+                ? (this.householdOf(list) ? [] : [{ label: this.$t('Leave list'), icon: 'leave', danger: true, online: true, run: () => this.leaveList(list.id) }])
+                : [{ label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteList(list.id) }]),
         ];
     },
 
@@ -630,6 +631,33 @@ Alpine.data('chorelist', () => ({
         if (!confirm(this.$t('Remove :name from the list?', { name: this.memberName(email, this.listDialog.id) }))) return;
         await this.online(async () => {
             await api.delete(`/lists/${this.listDialog.id}/members/${encodeURIComponent(email)}`);
+            replication?.resync();
+        }, (error) => { this.shareError = error; });
+    },
+
+    // ---- households (managed on the server rendered page /households)
+
+    get myHouseholds() {
+        return Alpine.store('sync').user?.households ?? [];
+    },
+    // The household through which the user sees a list (null: none of theirs).
+    householdOf(list) {
+        const mine = new Set(this.myHouseholds.map((household) => household.id));
+
+        return list?.households?.find((household) => mine.has(household.id)) ?? null;
+    },
+    isSharedWith(list, household) {
+        return (list?.households ?? []).some((each) => each.id === household.id);
+    },
+
+    async toggleHousehold(household) {
+        const listId = this.listDialog.id;
+        const shared = this.isSharedWith(this.dialogList, household);
+        if (shared && !confirm(this.$t('Stop sharing the list with the household ":household"? Its members lose access (except the ones you added yourself).', { household: household.name }))) return;
+        this.shareError = null;
+        await this.online(async () => {
+            if (shared) await api.delete(`/lists/${listId}/households/${household.id}`);
+            else await api.post(`/lists/${listId}/households`, { household: household.id });
             replication?.resync();
         }, (error) => { this.shareError = error; });
     },
@@ -1025,6 +1053,8 @@ Alpine.data('chorelist', () => ({
             case 'member.left': return this.$t(':member left the list', { member: data.email ?? '' });
             case 'member.invited': return this.$t(':member invited to the list', { member: data.email });
             case 'member.joined': return this.$t('Joined the list');
+            case 'household.shared': return this.$t('Shared with the household “:household”', { household: data.name ?? '' });
+            case 'household.unshared': return this.$t('No longer shared with the household “:household”', { household: data.name ?? '' });
             case 'completion.postponed': return this.$t('“:task” postponed to :date', { task, date: this.date(data.postponed_to) });
             case 'completion.undone': return this.$t('“:task” taken back', { task });
             default: return a.action;

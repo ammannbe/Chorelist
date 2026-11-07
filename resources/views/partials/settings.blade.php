@@ -7,7 +7,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <span class="min-w-0 break-all" x-text="$t('Logged in as :email', { email: $store.sync.user.email })"></span>
                     <button type="button" class="button-secondary shrink-0 whitespace-nowrap" @click="logout()" :disabled="busy" x-text="$t('Log Out')"></button>
-                    <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$t('Name, password, passkeys and deleting the account')"></a>
+                    <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$store.sync.user.linked ? $t('Name and deleting the account') : $t('Name, password, passkeys and deleting the account')"></a>
                 </div>
             </template>
             <template x-if="!loggedIn">
@@ -21,6 +21,20 @@
     </div>
 
     <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+        {{-- Households page is server rendered (needs a connection) --}}
+        <a x-show="loggedIn" href="/households" data-online class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
+            <span>
+                <span class="block">
+                    <span x-text="`🏠 ${$t('Households')}`"></span>
+                    <span x-show="$store.sync.user?.household_invitations" class="ml-1 rounded-full bg-sky-700 px-2 py-0.5 text-xs text-white"
+                        x-text="$store.sync.user?.household_invitations === 1 ? $t('1 invitation') : $t(':count invitations', { count: $store.sync.user?.household_invitations })"></span>
+                </span>
+                <span class="block text-sm text-stone-500" x-text="myHouseholds.length
+                    ? myHouseholds.map((household) => household.name).join(', ')
+                    : $t('Share lists with your family or flat in one go')"></span>
+            </span>
+            <span aria-hidden="true">›</span>
+        </a>
         <a href="#/notifications" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
             <span>
                 <span class="block" x-text="`🔔 ${$t('Notifications')}`"></span>

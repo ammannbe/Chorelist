@@ -2,13 +2,18 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Auth\OidcController;
+use App\Http\Controllers\HouseholdController;
+use App\Http\Controllers\HouseholdInvitationController;
+use App\Http\Controllers\HouseholdMemberController;
 use App\Http\Controllers\IcalController;
 use App\Http\Controllers\InviteController;
+use App\Http\Controllers\ListHouseholdController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SyncController;
+use App\Models\Household;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +36,8 @@ Route::middleware('auth')->group(function () {
         'email' => $request->user()->email,
         'name' => $request->user()->name,
         'verified' => $request->user()->hasVerifiedEmail(),
+        // Linked to the OIDC login: no password and no passkeys (App\Auth\OidcAccount).
+        'linked' => $request->user()->isLinkedToOidc(),
         'locale' => $request->user()->locale,
         'timezone' => $request->user()->timezone,
         'preferences' => $request->user()->preferences(),
@@ -38,6 +45,10 @@ Route::middleware('auth')->group(function () {
         'vapid_public_key' => config('webpush.vapid.public_key'),
         'push_devices' => $request->user()->pushSubscriptions()->count(),
         'ical_url' => IcalController::url($request->user()),
+        // For sharing lists with a household, and a hint about open invitations.
+        'households' => $request->user()->households()->orderBy('name')->get()
+            ->map(fn (Household $household) => ['id' => $household->uuid, 'name' => $household->name, 'role' => $household->pivot->role])->all(),
+        'household_invitations' => $request->user()->householdInvitations()->count(),
     ])->name('me');
     Route::put('preferences', [PreferenceController::class, 'update'])->name('preferences.update');
 
@@ -45,6 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::get('account', fn (Request $request) => view('account', [
         'passkeyCount' => $request->user()->passkeys()->count(),
     ]))->name('account');
+    Route::post('account/oidc', [OidcController::class, 'link'])->middleware('throttle:5,1')->name('oidc.link');
     Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
     Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
         'passkeys' => $request->user()->passkeys()->latest()->get(),
@@ -63,6 +75,24 @@ Route::middleware('auth')->group(function () {
         Route::delete('lists/{list}/members/{email}', [MemberController::class, 'destroy'])->name('members.destroy');
         Route::post('lists/{list}/invites', [InviteController::class, 'store'])->middleware('throttle:20,1')->name('invites.store');
         Route::delete('lists/{list}/invites', [InviteController::class, 'destroy'])->name('invites.destroy');
+        Route::post('lists/{list}/households', [ListHouseholdController::class, 'store'])->name('list-households.store');
+        Route::delete('lists/{list}/households/{household}', [ListHouseholdController::class, 'destroy'])->name('list-households.destroy');
+
+        // Households (server rendered, config/households.php).
+        Route::get('households', [HouseholdController::class, 'index'])->name('households.index');
+        Route::post('households', [HouseholdController::class, 'store'])->middleware('throttle:20,1')->name('households.store');
+        Route::get('households/{household}', [HouseholdController::class, 'show'])->name('households.show');
+        Route::patch('households/{household}', [HouseholdController::class, 'update'])->name('households.update');
+        Route::delete('households/{household}', [HouseholdController::class, 'destroy'])->name('households.destroy');
+        Route::patch('households/{household}/members/{member}', [HouseholdMemberController::class, 'update'])->name('households.members.update');
+        Route::delete('households/{household}/members/{member}', [HouseholdMemberController::class, 'destroy'])->name('households.members.destroy');
+        Route::post('households/{household}/invitations', [HouseholdInvitationController::class, 'store'])->middleware('throttle:20,1')->name('households.invitations.store');
+        Route::delete('households/{household}/invitations/{invitation}', [HouseholdInvitationController::class, 'destroy'])->name('households.invitations.destroy');
+        // Invitations for the user: link in the mail, or from the households page.
+        Route::get('household-invitations/{token}', [HouseholdInvitationController::class, 'show'])->name('household-invitations.show');
+        Route::post('household-invitations/{token}', [HouseholdInvitationController::class, 'acceptToken'])->middleware('throttle:20,1')->name('household-invitations.accept-token');
+        Route::post('household-invitations/{invitation}/accept', [HouseholdInvitationController::class, 'acceptOpen'])->middleware('throttle:20,1')->name('household-invitations.accept');
+        Route::delete('household-invitations/{invitation}', [HouseholdInvitationController::class, 'decline'])->name('household-invitations.decline');
 
         Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push.store');
         Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');

@@ -1,0 +1,42 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Households
+    |--------------------------------------------------------------------------
+    |
+    | Lists can be shared with a household: all its members get access, also
+    | the ones joining later. "local": households are managed in this app
+    | (create, invite by email, roles). "account-manager": households are mirrored from
+    | the AccountManager (webhooks plus a daily sync, matched by oidc_sub);
+    | managing them here is read only, sharing lists with them stays possible.
+    |
+    */
+
+    'driver' => env('HOUSEHOLDS_DRIVER', 'local'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | AccountManager ("Konto")
+    |--------------------------------------------------------------------------
+    |
+    | Contract: AccountManager docs/HOUSEHOLDS-API.md. The secret of the
+    | service signs the webhooks (POST /api/account-manager/webhook) and authenticates
+    | the API calls (HTTP Basic with the service key). report_shares: tell the
+    | AccountManager which lists are shared with a household (overview only).
+    | label: name of the AccountManager in the household texts; empty: the name it
+    | publishes at /api/info (App\Households\AccountManagerLabel), otherwise "Account".
+    |
+    */
+
+    'account_manager' => [
+        'url' => env('ACCOUNT_MANAGER_URL'),
+        'key' => env('ACCOUNT_MANAGER_SERVICE_KEY'),
+        'secret' => env('ACCOUNT_MANAGER_SECRET'),
+        'report_shares' => (bool) env('ACCOUNT_MANAGER_REPORT_SHARES', true),
+        'label' => env('ACCOUNT_MANAGER_LABEL'),
+    ],
+
+];

@@ -3,6 +3,7 @@
 namespace App\Sync;
 
 use App\Models\Activity;
+use App\Models\Household;
 use App\Models\Membership;
 use App\Models\TaskList;
 use App\Models\User;
@@ -11,8 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\Rule;
 
 /**
- * Lists are pulled through the user's memberships, so revoked access and deleted lists both
- * arrive as deleted documents. Name, icon and ranking belong to the owner, order and muting
+ * Lists are pulled through the user's memberships (also the ones through a household), so revoked
+ * access and deleted lists both arrive as deleted documents. Name, icon and ranking belong to the owner, order and muting
  * are personal (membership). The document's version is the sum of both versions, so personal
  * changes do not conflict with the changes of the others.
  */
@@ -24,7 +25,7 @@ class ListResource extends SyncResource
     {
         return Membership::withTrashed()
             ->where('user_id', $user->id)
-            ->with(['taskList.owner', 'taskList.memberships.user']);
+            ->with(['taskList.owner', 'taskList.memberships.user', 'taskList.households']);
     }
 
     protected function checkpointIdColumn(): string
@@ -60,9 +61,14 @@ class ListResource extends SyncResource
             'owner_email' => $list->owner?->email,
             'is_owner' => $list->isOwnedBy($user),
             // All members see each other (ranking, history), the user included.
+            // direct false: member only through a household.
             'members' => $list->memberships
-                ->map(fn (Membership $membership) => ['email' => $membership->user->email, 'name' => $membership->user->name])
+                ->map(fn (Membership $membership) => ['email' => $membership->user->email, 'name' => $membership->user->name, 'direct' => $membership->direct])
                 ->sortBy('email')->values()->all(),
+            'households' => $list->households
+                ->map(fn (Household $household) => ['id' => $household->uuid, 'name' => $household->name])
+                ->sortBy('name')->values()->all(),
+            'direct' => $model->direct,
             'position' => $model->position,
             'muted' => $model->muted,
             'version' => $list->version + $model->version,
@@ -115,6 +121,9 @@ class ListResource extends SyncResource
                 $list->save();
                 $list->delete();
                 $list->touchForMembers();
+            } elseif ($list->hasHouseholdAccess($user)) {
+                // Access through a household: only leaving the household (or unsharing) removes it.
+                return $this->document($membership->setRelation('taskList', $list), $user);
             } else {
                 // Members cannot delete a list, they leave it.
                 $list->removeMember($user);

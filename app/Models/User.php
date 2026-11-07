@@ -10,11 +10,13 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
+use LogicException;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
 #[Fillable(['name', 'email', 'password', 'locale', 'timezone'])]
@@ -23,6 +25,16 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasPushSubscriptions, Notifiable, PasskeyAuthenticatable;
+
+    protected static function booted(): void
+    {
+        // A linked account logs in through the OIDC provider only; link and unlink through App\Auth\OidcAccount.
+        static::saving(function (User $user): void {
+            if ($user->isLinkedToOidc() && $user->password !== null && $user->isDirty(['password', 'oidc_sub'])) {
+                throw new LogicException('An account linked to the OIDC login cannot have a password.');
+            }
+        });
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -44,6 +56,14 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function preferredLocale(): ?string
     {
         return $this->locale;
+    }
+
+    /**
+     * Logs in through the OpenID Connect provider only (see App\Auth\OidcAccount).
+     */
+    public function isLinkedToOidc(): bool
+    {
+        return $this->oidc_sub !== null;
     }
 
     /**
@@ -88,6 +108,22 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     public function absences(): HasMany
     {
         return $this->hasMany(Absence::class);
+    }
+
+    public function households(): BelongsToMany
+    {
+        return $this->belongsToMany(Household::class)->withPivot('role', 'joined_at');
+    }
+
+    /**
+     * Open household invitations for the user's address (only once it is verified).
+     */
+    public function householdInvitations(): Builder
+    {
+        return HouseholdInvitation::open()
+            ->where('email', mb_strtolower($this->email))
+            ->unless($this->hasVerifiedEmail(), fn (Builder $query) => $query->whereRaw('1 = 0'))
+            ->whereNotIn('household_id', $this->households()->select('households.id'));
     }
 
     /**

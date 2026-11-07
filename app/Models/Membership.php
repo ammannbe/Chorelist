@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Table('task_list_user')]
-#[Fillable(['task_list_id', 'user_id', 'position', 'muted'])]
+#[Fillable(['task_list_id', 'user_id', 'direct', 'position', 'muted'])]
 class Membership extends Model
 {
     use Syncable;
@@ -19,6 +19,8 @@ class Membership extends Model
         return [
             'position' => 'float',
             'muted' => 'boolean',
+            // False: access only through a household (TaskList::syncHouseholdMembers).
+            'direct' => 'boolean',
         ];
     }
 

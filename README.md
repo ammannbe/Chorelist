@@ -7,7 +7,7 @@ Offline-first web app (PWA) for shared household chores, similar to the tasks of
 - **History** of who did, skipped, postponed or changed what; missed dates.
 - **Points ranking** per list (optional, per week, month or all time), fair with holidays, and personal suggestions which task is worth doing next.
 - **Works offline**: all lists live on the device and sync in the background as soon as a connection is available.
-- **Share lists**: invite others by email or with an invitation link, changes of all members are merged.
+- **Share lists**: invite others by email or with an invitation link, or share with a household (family, flat) so all its members see the list; changes of all members are merged.
 - **Calendar subscription** (iCal), steps per task, categories, dark mode, data export.
 - **Installable**: add it to the home screen on Android and iOS, no app store needed.
 - **Passkeys**: log in with Face ID, Touch ID, Windows Hello or the device PIN.
@@ -42,6 +42,8 @@ ddev npm run dev
   * * * * *  cd /path-to-the-project && php artisan queue:work --max-time=50 >> /dev/null 2>&1
   ```
   The scheduler sends the reminders (`reminders:send` every 5 minutes), the queue the mails and push notifications.
+- Login with an OpenID Connect provider (optional, e.g. Pocket ID): `AUTH_OIDC_*` in `.env` (see `config/login.php`). An account linked to the provider logs in only there (no password, no passkeys, no password reset); keep the `AUTH_LOCAL_EMERGENCY_EMAILS` accounts unlinked as local emergency access. Way back to passwords: `php artisan users:unlink-oidc <email>` (or `--all`), then "Forgot your password?".
+- Households from the AccountManager (optional): `HOUSEHOLDS_DRIVER=account-manager`, `ACCOUNT_MANAGER_URL`, `ACCOUNT_MANAGER_SERVICE_KEY`, `ACCOUNT_MANAGER_SECRET` in `.env`; in the AccountManager (Services → edit) the webhook URL `<APP_URL>/api/account-manager/webhook` and a secret. Needs OIDC login (members are matched by `oidc_sub`). Switching from local households: `php artisan households:import` (an admin of the AccountManager confirms the proposals, the hourly `households:import --check` maps them). Contract: AccountManager `docs/HOUSEHOLDS-API.md`.
 - Push notifications: `php artisan webpush:vapid` once, `VAPID_SUBJECT` (mailto: or https: URL) in `.env`. Keep the keys: new keys invalidate all push subscriptions.
 - Apache: `public/.htaccess` sets the manifest MIME type and disables caching of `sw.js` and `push-sw.js` (needs `mod_headers`).
 

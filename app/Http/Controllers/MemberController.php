@@ -63,7 +63,8 @@ class MemberController extends Controller
     }
 
     /**
-     * The owner removes a member, or a member leaves the list.
+     * The owner removes a member, or a member leaves the list. Members through a household keep
+     * their access (TaskList::removeMember).
      */
     public function destroy(Request $request, TaskList $list, string $email): Response
     {
@@ -72,11 +73,23 @@ class MemberController extends Controller
         $member = User::where('email', Str::lower($email))->firstOrFail();
 
         abort_if($list->isOwnedBy($member), 422, 'The owner cannot be removed.');
-        abort_unless($list->hasMember($member), 404);
+        $membership = $list->memberships()->where('user_id', $member->id)->first();
+        abort_if($membership === null, 404);
 
-        DB::transaction(function () use ($list, $member, $request) {
+        // Access through a household stays until the list is unshared or the member leaves the household.
+        $household = $list->hasHouseholdAccess($member);
+        if ($household && $member->is($request->user())) {
+            abort(422, __('You are a member through a household. Leave the household to leave the list.'));
+        }
+        if ($household && ! $membership->direct) {
+            abort(422, __(':name is a member through a household.', ['name' => $member->displayName()]));
+        }
+
+        DB::transaction(function () use ($list, $member, $request, $household) {
             $list->removeMember($member);
-            Activity::record($list, $request->user(), $member->is($request->user()) ? 'member.left' : 'member.removed', ['email' => $member->email]);
+            if (! $household) {
+                Activity::record($list, $request->user(), $member->is($request->user()) ? 'member.left' : 'member.removed', ['email' => $member->email]);
+            }
         });
 
         return response()->noContent();
