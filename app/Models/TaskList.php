@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Households\KontoHouseholds;
+use App\Jobs\ReportKontoShares;
 use App\Models\Concerns\Syncable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +20,25 @@ class TaskList extends Model
     use HasFactory, Syncable;
 
     public const RANKING_PERIODS = ['week', 'month', 'all'];
+
+    protected static function booted(): void
+    {
+        // The AccountManager shows the names of the lists shared with a household (HOUSEHOLDS_DRIVER=konto).
+        static::updated(function (TaskList $list) {
+            if ($list->wasChanged(['name', 'icon'])) {
+                $list->reportKontoShares();
+            }
+        });
+        static::deleted(fn (TaskList $list) => $list->reportKontoShares());
+        static::restored(fn (TaskList $list) => $list->reportKontoShares());
+    }
+
+    public function reportKontoShares(): void
+    {
+        if (KontoHouseholds::enabled()) {
+            ReportKontoShares::dispatchFor($this->households()->whereNotNull('konto_household_uuid')->get());
+        }
+    }
 
     protected function casts(): array
     {

@@ -2,7 +2,12 @@
     <p class="mb-6 text-sm text-stone-600">{{ __('Share task lists with a household: all its members see them, also the ones joining later. Whoever leaves the household loses access, the lists stay with their owners.') }}</p>
 
     @unless ($local)
-        <p class="notice mb-6">{{ __('Households are managed in your account. Here you only see them.') }}</p>
+        <p class="notice mb-6">
+            {{ __('Households are managed in your account. Here you only see them.') }}
+            @if ($kontoUrl)
+                <a class="underline" href="{{ $kontoUrl }}">{{ __('Manage households in your account') }}</a>
+            @endif
+        </p>
     @endunless
 
     @if ($invitations->isNotEmpty())
@@ -36,6 +41,17 @@
         @php($admin = $me?->pivot->role === App\Models\Household::ADMIN)
         <section class="mb-10 space-y-4" id="household-{{ $household->uuid }}">
             <h2 class="text-lg font-semibold">🏠 {{ $household->name }}</h2>
+
+            @if (! $local && $household->konto_household_uuid === null)
+                <p class="text-sm text-stone-500">
+                    {{ __('Only in this app, not managed in your account.') }}
+                    @if ($household->konto_import_status === 'pending')
+                        {{ __('Proposed for your account, waiting for confirmation.') }}
+                    @elseif ($household->konto_import_status === 'rejected')
+                        {{ __('Not taken over into your account.') }}
+                    @endif
+                </p>
+            @endif
 
             @if ($local && $admin)
                 <form method="POST" action="{{ route('households.update', $household) }}" class="flex gap-2">
@@ -82,6 +98,9 @@
                         </li>
                     @endforeach
                 </ul>
+                @if (! $local && $household->pending_members_count)
+                    <p class="mt-2 text-xs text-stone-500">{{ $household->pending_members_count === 1 ? __('1 more member has not used the app yet.') : __(':count more members have not used the app yet.', ['count' => $household->pending_members_count]) }}</p>
+                @endif
             </div>
 
             @if ($local && $admin)

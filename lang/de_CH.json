@@ -763,5 +763,11 @@
     "You see this list through the household “:household”. To leave it, leave the household.": "Du siehst diese Liste über den Haushalt «:household». Um sie zu verlassen, verlasse den Haushalt.",
     "1 invitation": "1 Einladung",
     ":count invitations": ":count Einladungen",
-    "Share lists with your family or flat in one go": "Listen auf einmal mit Familie oder WG teilen"
+    "Share lists with your family or flat in one go": "Listen auf einmal mit Familie oder WG teilen",
+    "Manage households in your account": "Haushalte im Konto verwalten",
+    "Only in this app, not managed in your account.": "Nur in dieser App, nicht im Konto verwaltet.",
+    "Proposed for your account, waiting for confirmation.": "Fürs Konto vorgeschlagen, wartet auf Bestätigung.",
+    "Not taken over into your account.": "Nicht ins Konto übernommen.",
+    "1 more member has not used the app yet.": "1 weiteres Mitglied nutzt die App noch nicht.",
+    ":count more members have not used the app yet.": ":count weitere Mitglieder nutzen die App noch nicht."
 }

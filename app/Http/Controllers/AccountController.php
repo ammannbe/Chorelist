@@ -28,8 +28,8 @@ class AccountController extends Controller
         $request->session()->regenerateToken();
 
         DB::transaction(function () use ($user) {
-            // Another member takes over as admin, empty households are deleted.
-            $user->households()->get()->each(fn (Household $household) => $household->removeUser($user, handOver: true));
+            // Another member takes over as admin, empty households are deleted (mirrored ones: the AccountManager decides).
+            $user->households()->get()->each(fn (Household $household) => $household->removeUser($user, handOver: ! $household->isMirrored()));
             TaskList::where('owner_id', $user->id)->get()->each(function (TaskList $list) {
                 $list->delete();
                 $list->touchForMembers();

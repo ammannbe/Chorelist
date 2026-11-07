@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ReportKontoShares;
 use App\Models\Activity;
 use App\Models\Household;
 use App\Models\TaskList;
@@ -40,6 +41,7 @@ class ListHouseholdController extends Controller
             return $granted;
         });
         $granted->each(fn (User $member) => $member->notify(new ListShared($user, $list, false)));
+        ReportKontoShares::dispatchFor($household);
 
         return response()->json(['status' => 'shared']);
     }
@@ -56,6 +58,7 @@ class ListHouseholdController extends Controller
             $list->syncHouseholdMembers();
             $list->touchForMembers();
         });
+        ReportKontoShares::dispatchFor($household);
 
         return response()->noContent();
     }

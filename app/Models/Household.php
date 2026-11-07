@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -35,6 +36,13 @@ class Household extends Model
         });
     }
 
+    protected function casts(): array
+    {
+        return [
+            'konto_version' => 'integer',
+        ];
+    }
+
     public function getRouteKeyName(): string
     {
         return 'uuid';
@@ -46,6 +54,15 @@ class Household extends Model
     public static function managedLocally(): bool
     {
         return config('households.driver') === 'local';
+    }
+
+    /**
+     * Mirrored from the AccountManager (HOUSEHOLDS_DRIVER=konto): name and members come from there.
+     * After switching back to "local" mirrored households are ordinary local ones.
+     */
+    public function isMirrored(): bool
+    {
+        return $this->konto_household_uuid !== null && ! self::managedLocally();
     }
 
     public function creator(): BelongsTo
@@ -61,6 +78,14 @@ class Household extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(HouseholdInvitation::class);
+    }
+
+    /**
+     * Members of the mirrored household without a user here yet (attached on their first OIDC login).
+     */
+    public function pendingMembers(): HasMany
+    {
+        return $this->hasMany(HouseholdPendingMember::class);
     }
 
     public function taskLists(): BelongsToMany
@@ -116,10 +141,7 @@ class Household extends Model
     {
         DB::transaction(function () use ($user, $handOver) {
             $lastAdmin = $this->isLastAdmin($user);
-            $this->users()->detach($user);
-            $own = $this->taskLists()->withTrashed()->where('owner_id', $user->id)->get();
-            $this->taskLists()->detach($own->modelKeys());
-            $own->each->syncHouseholdMembers();
+            $this->detachUsers([$user->id]);
             $this->syncLists();
 
             if (! $handOver) {
@@ -132,6 +154,23 @@ class Household extends Model
                 $this->setRole($next, self::ADMIN);
             }
         });
+    }
+
+    /**
+     * Removes the users without syncing the shared lists (the caller does): their own lists are no
+     * longer shared with the household. Returns these lists.
+     *
+     * @param  list<int>  $userIds
+     * @return Collection<int, TaskList>
+     */
+    public function detachUsers(array $userIds): Collection
+    {
+        $this->users()->detach($userIds);
+        $own = $this->taskLists()->withTrashed()->whereIn('owner_id', $userIds)->get();
+        $this->taskLists()->detach($own->modelKeys());
+        $own->each->syncHouseholdMembers();
+
+        return $own;
     }
 
     /**
