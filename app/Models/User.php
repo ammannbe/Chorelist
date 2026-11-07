@@ -84,6 +84,19 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     }
 
     /**
+     * Name and email are part of synced documents (members, completions, holidays, tasks): after a
+     * change the members of the user's lists pull them again.
+     */
+    public function touchSharedDocuments(): void
+    {
+        TaskList::whereIn('id', $this->accessibleListIds())->get()->each->touchForMembers();
+        Completion::where('user_id', $this->id)->orWhere('entered_by_id', $this->id)->touch();
+        Task::where('creator_id', $this->id)->touch();
+        Activity::where('user_id', $this->id)->touch();
+        $this->absences()->touch();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function preferences(): array

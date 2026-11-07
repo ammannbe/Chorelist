@@ -4,11 +4,14 @@ namespace Tests\Feature;
 
 use App\Auth\OidcClaims;
 use App\Auth\OidcLabel;
+use App\Models\TaskList;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use RuntimeException;
 use SocialiteProviders\OIDC\InvalidTokenException;
 use Tests\Feature\Concerns\MocksOidcProvider;
@@ -52,6 +55,45 @@ class OidcLoginTest extends TestCase
         $this->signIn()->assertRedirect('/');
 
         $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_linked_users_get_the_name_of_the_provider_on_every_login(): void
+    {
+        $user = User::factory()->create(['oidc_sub' => 'sub-123', 'name' => 'Alter Name']);
+
+        $this->signIn()->assertRedirect('/');
+        $this->assertSame('Pocket Member', $user->fresh()->name);
+
+        // A provider without a name keeps the last one.
+        Auth::logout();
+        $this->signIn(['name' => '']);
+        $this->assertSame('Pocket Member', $user->fresh()->name);
+    }
+
+    public function test_the_name_of_the_provider_reaches_the_members(): void
+    {
+        $user = User::factory()->create(['oidc_sub' => 'sub-123', 'name' => 'Alter Name']);
+        $member = User::factory()->create();
+        $list = new TaskList(['name' => 'WG']);
+        $list->id = (string) Str::uuid();
+        $list->owner()->associate($user)->save();
+        $list->addMember($user);
+        $membership = $list->addMember($member);
+        $this->travel(5)->seconds();
+
+        $this->signIn()->assertRedirect('/');
+
+        // The members pull the list with the new name (ListResource members).
+        $this->assertTrue($membership->fresh()?->updated_at?->isAfter(now()->subSecond()));
+    }
+
+    public function test_linking_by_email_takes_the_name_of_the_provider(): void
+    {
+        $user = User::factory()->create(['email' => 'member@example.com', 'name' => null]);
+
+        $this->signIn()->assertRedirect('/');
+
+        $this->assertSame('Pocket Member', $user->fresh()->name);
     }
 
     public function test_a_verified_local_account_is_linked_by_email(): void
@@ -157,17 +199,17 @@ class OidcLoginTest extends TestCase
         $user = User::factory()->create(['email' => 'different@example.com']);
         $this->provider()->shouldReceive('user')->andReturn($this->identity());
 
-        // The account page confirms the password first (OidcLinkedAccountTest).
+        // The settings confirm the password first (OidcLinkedAccountTest).
         $this->actingAs($user)->withSession(['oidc.password_confirmed_at' => now()->getTimestamp()])
             ->get(route('oidc.redirect', ['link' => 1]))->assertRedirect('https://login.example.com/authorize');
-        $this->get(route('oidc.callback'))->assertRedirect(route('account'));
+        $this->get(route('oidc.callback'))->assertRedirect('/#/settings');
 
         $this->assertSame('sub-123', $user->fresh()->oidc_sub);
         $this->assertDatabaseMissing('users', ['email' => 'member@example.com']);
 
         // Right after linking the OIDC login is recent, unlinking only needs the new password.
-        $this->delete(route('oidc.unlink'), ['password' => 'new-secret-password', 'password_confirmation' => 'new-secret-password'])
-            ->assertRedirect(route('account'));
+        $this->deleteJson(route('oidc.unlink'), ['password' => 'new-secret-password', 'password_confirmation' => 'new-secret-password'])
+            ->assertOk();
         $this->assertNull($user->fresh()->oidc_sub);
     }
 
@@ -243,10 +285,8 @@ class OidcLoginTest extends TestCase
     {
         $user = User::factory()->create(['password' => null]);
 
-        $this->actingAs($user)->get(route('account'))
-            ->assertOk()
-            ->assertDontSee('current_password', false)
-            ->assertDontSee('action="'.route('account.destroy').'"', false);
+        // The settings show how to set one instead of the password forms.
+        $this->actingAs($user)->getJson('/me')->assertJsonPath('account.has_password', false);
     }
 
     public function test_the_register_page_offers_the_provider_and_its_signup(): void

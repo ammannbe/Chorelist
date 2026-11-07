@@ -2,10 +2,6 @@
 
 namespace App\Actions\Fortify;
 
-use App\Models\Activity;
-use App\Models\Completion;
-use App\Models\Task;
-use App\Models\TaskList;
 use App\Models\User;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Validator;
@@ -13,6 +9,10 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\UpdatesUserProfileInformation;
 
+/**
+ * "Change e-mail" in the settings. The name is not editable (local accounts keep the one of the
+ * registration, linked accounts get it from the provider on every login, App\Auth\OidcLogin).
+ */
 class UpdateUserProfileInformation implements UpdatesUserProfileInformation
 {
     /**
@@ -24,14 +24,14 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
      */
     public function update(User $user, array $input): void
     {
-        // A linked account keeps the address it logs in with (read only on the account page); unlinking first.
+        // A linked account keeps the address it logs in with (the settings offer no form, Fortify's route stays); unlinking first.
         if ($user->isLinkedToOidc()) {
             $input['email'] = $user->email;
         }
 
-        Validator::make($input, [
-            'name' => ['nullable', 'string', 'max:255'],
+        $changed = mb_strtolower(trim((string) ($input['email'] ?? ''))) !== mb_strtolower($user->email);
 
+        Validator::make($input, [
             'email' => [
                 'required',
                 'string',
@@ -39,32 +39,21 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
                 'max:255',
                 Rule::unique('users')->ignore($user->id),
             ],
+            // The address receives the password reset links: changing it needs the password.
+            'current_password' => $changed ? ['required', 'string', 'current_password:web'] : [],
         ])->validateWithBag('updateProfileInformation');
 
-        if ($input['email'] !== $user->email &&
-            $user instanceof MustVerifyEmail) {
-            $this->updateVerifiedUser($user, $input);
-        } else {
-            $user->forceFill([
-                'name' => $input['name'] ?? null,
-                'email' => $input['email'],
-            ])->save();
+        if (! $changed) {
+            return;
         }
 
-        $this->touchSyncedDocuments($user);
-    }
+        if ($user instanceof MustVerifyEmail) {
+            $this->updateVerifiedUser($user, $input);
+        } else {
+            $user->forceFill(['email' => $input['email']])->save();
+        }
 
-    /**
-     * Name and email are part of synced documents (members, completions, holidays, tasks):
-     * the members of the user's lists pull them again.
-     */
-    private function touchSyncedDocuments(User $user): void
-    {
-        TaskList::whereIn('id', $user->accessibleListIds())->get()->each->touchForMembers();
-        Completion::where('user_id', $user->id)->orWhere('entered_by_id', $user->id)->touch();
-        Task::where('creator_id', $user->id)->touch();
-        Activity::where('user_id', $user->id)->touch();
-        $user->absences()->touch();
+        $user->touchSharedDocuments();
     }
 
     /**
@@ -75,7 +64,6 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
     protected function updateVerifiedUser(User $user, array $input): void
     {
         $user->forceFill([
-            'name' => $input['name'] ?? null,
             'email' => $input['email'],
             'email_verified_at' => null,
         ])->save();

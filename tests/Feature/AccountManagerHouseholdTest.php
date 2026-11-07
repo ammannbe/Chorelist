@@ -383,8 +383,8 @@ class AccountManagerHouseholdTest extends TestCase
         // Unlinking needs the OIDC login, a recent OIDC login and a new password (OidcLinkedAccountTest).
         config(['login.oidc.enabled' => true]);
         $this->actingAs($this->member)->withSession(['oidc.signed_in_at' => now()->getTimestamp()])
-            ->delete('/account/oidc', ['password' => 'new-secret-password', 'password_confirmation' => 'new-secret-password'])
-            ->assertRedirect('/account');
+            ->deleteJson('/account/oidc', ['password' => 'new-secret-password', 'password_confirmation' => 'new-secret-password'])
+            ->assertOk();
 
         $this->assertFalse($household->hasUser($this->member));
         $this->assertSame(['sub-member'], $household->pendingMembers()->pluck('oidc_sub')->all());
