@@ -19,6 +19,7 @@ use RRule\RRule;
  * - fixed: calendar, RFC 5545 RRULE from the start date (DTSTART) until ends_on.
  * - after_completion: FREQ/INTERVAL of the RRULE after the last completion (or skip).
  * - once: one occurrence on the start date.
+ * - dates: one occurrence on each of the given dates (e.g. waste collection), finished after the last.
  * - on_demand: no due date, done whenever needed.
  *
  * An occurrence starts on its date and is due window_days later (or on the date it was
@@ -27,7 +28,10 @@ use RRule\RRule;
  */
 class Schedule
 {
-    public const MODES = ['fixed', 'after_completion', 'once', 'on_demand'];
+    public const MODES = ['fixed', 'after_completion', 'once', 'dates', 'on_demand'];
+
+    /** Dates of a task in the mode `dates`. */
+    public const MAX_DATES = 400;
 
     public const RULE_PARTS = ['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'BYSETPOS', 'WKST'];
 
@@ -37,7 +41,7 @@ class Schedule
     /**
      * State of a task on a day.
      *
-     * @param  array{mode: string, rrule: ?string, starts_on: string, window_days?: int, ends_on?: ?string, paused_until?: ?string}  $task
+     * @param  array{mode: string, rrule: ?string, starts_on: string, window_days?: int, ends_on?: ?string, paused_until?: ?string, dates?: ?list<string>}  $task
      * @param  list<array{occurrence: ?string, done_on: string, type: string, postponed_to?: ?string}>  $completions  of this task
      * @return array{occurrence: ?string, start: ?string, due: ?string, status: string, last_done: ?string}
      */
@@ -54,6 +58,7 @@ class Schedule
         $start = match ($task['mode']) {
             'once' => self::isResolved($completions, $task['starts_on']) ? null : $task['starts_on'],
             'after_completion' => self::afterCompletionStart($task, $completions),
+            'dates' => self::datesStart($task, $completions, $today),
             default => self::fixedStart($task, $completions, $today),
         };
 
@@ -74,7 +79,7 @@ class Schedule
     }
 
     /**
-     * Occurrences of a fixed task between two dates (inclusive), e.g. for the calendar feed
+     * Occurrences of a fixed (once, dates) task between two dates (inclusive), e.g. for the calendar feed
      * and the missed ones in the history.
      *
      * @return list<string>
@@ -83,6 +88,9 @@ class Schedule
     {
         if ($task['mode'] === 'once') {
             return $task['starts_on'] >= $from && $task['starts_on'] <= $to ? [$task['starts_on']] : [];
+        }
+        if ($task['mode'] === 'dates') {
+            return array_values(array_filter(self::dates($task), fn (string $date) => $date >= $from && $date <= $to));
         }
         if ($task['mode'] !== 'fixed') {
             return [];
@@ -95,14 +103,14 @@ class Schedule
     }
 
     /**
-     * Occurrences of a fixed task that started before the open one and were neither done nor
-     * skipped (from a date on, paused ones not counted).
+     * Occurrences of a fixed (or dates) task that started before the open one and were neither
+     * done nor skipped (from a date on, paused ones not counted).
      *
      * @return list<string>
      */
     public static function missed(array $task, array $completions, string $from, string $today): array
     {
-        if ($task['mode'] !== 'fixed') {
+        if (! in_array($task['mode'], ['fixed', 'dates'], true)) {
             return [];
         }
         $completions = array_values(array_filter($completions, fn ($c) => $c['type'] !== 'undone'));
@@ -144,6 +152,20 @@ class Schedule
         return CarbonImmutable::now($timezone ?: config('app.timezone'))->format('Y-m-d');
     }
 
+    /**
+     * Dates of the mode `dates`: valid Y-m-d strings, sorted, each once.
+     *
+     * @return list<string>
+     */
+    public static function normalizeDates(mixed $dates): array
+    {
+        $dates = array_filter((array) $dates, fn ($date) => is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date));
+        $dates = array_values(array_unique($dates));
+        sort($dates);
+
+        return $dates;
+    }
+
     public static function addDays(string $date, int $days): string
     {
         return self::date($date)->modify(($days >= 0 ? '+' : '').$days.' days')->format('Y-m-d');
@@ -166,6 +188,7 @@ class Schedule
             'window_days' => $task->window_days,
             'ends_on' => $task->ends_on?->format('Y-m-d'),
             'paused_until' => $task->paused_until?->format('Y-m-d'),
+            'dates' => $task->dates,
         ], $completions->map(fn (Completion $c) => [
             'occurrence' => $c->occurrence?->format('Y-m-d'),
             'done_on' => $c->done_on->format('Y-m-d'),
@@ -195,6 +218,36 @@ class Schedule
         }
 
         return null;
+    }
+
+    /**
+     * Same as fixedStart() with the given dates instead of a rule.
+     */
+    private static function datesStart(array $task, array $completions, string $today): ?string
+    {
+        $dates = self::dates($task);
+        // Latest date that started (today included).
+        $started = array_filter($dates, fn (string $date) => $date <= $today);
+        $last = $started ? end($started) : null;
+        if ($last !== null && ! self::isPaused($task, $last) && ! self::isResolved($completions, $last)) {
+            return $last;
+        }
+
+        foreach ($dates as $date) {
+            if (($last === null || $date > $last) && ! self::isPaused($task, $date) && ! self::isResolved($completions, $date)) {
+                return $date;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function dates(array $task): array
+    {
+        return self::normalizeDates($task['dates'] ?? []);
     }
 
     private static function afterCompletionStart(array $task, array $completions): ?string

@@ -61,6 +61,17 @@ class ReminderTest extends TestCase
         Notification::assertSentToTimes($this->user, TaskReminder::class, 1);
     }
 
+    public function test_tasks_on_specific_dates_are_reminded_before_the_next_date(): void
+    {
+        // Thursday 5 November is collected, the reminder is sent the day before.
+        $this->task(['title' => 'Kehricht', 'mode' => 'dates', 'rrule' => null, 'starts_on' => '2026-11-05', 'dates' => ['2026-11-05', '2026-11-19'], 'reminders' => [1]]);
+        $this->task(['title' => 'Karton', 'mode' => 'dates', 'rrule' => null, 'starts_on' => '2026-11-12', 'dates' => ['2026-11-12'], 'reminders' => [1]]);
+
+        $this->artisan('reminders:send')->assertSuccessful();
+
+        Notification::assertSentToTimes($this->user, TaskReminder::class, 1);
+    }
+
     public function test_nothing_before_the_reminder_time_or_while_absent(): void
     {
         $this->task(['reminders' => [2]]);

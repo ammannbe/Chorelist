@@ -74,7 +74,37 @@
           "expect": { "occurrence": "2026-11-20", "due": "2026-11-20", "status": "upcoming" } },
         { "name": "postponed beyond the next occurrence", "task": { "mode": "fixed", "rrule": "FREQ=WEEKLY;BYDAY=MO", "starts_on": "2026-11-02" },
           "completions": [{ "occurrence": "2026-11-02", "done_on": "2026-11-02", "type": "postponed", "postponed_to": "2026-11-11" }], "today": "2026-11-10",
-          "expect": { "occurrence": "2026-11-09", "due": "2026-11-09", "status": "overdue" } }
+          "expect": { "occurrence": "2026-11-09", "due": "2026-11-09", "status": "overdue" } },
+        { "name": "dates, before the first date", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] }, "completions": [], "today": "2026-11-01",
+          "expect": { "occurrence": "2026-11-03", "due": "2026-11-03", "status": "upcoming" } },
+        { "name": "dates, on the day", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] }, "completions": [], "today": "2026-11-03",
+          "expect": { "occurrence": "2026-11-03", "due": "2026-11-03", "status": "due" } },
+        { "name": "dates, overdue", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] }, "completions": [], "today": "2026-11-05",
+          "expect": { "occurrence": "2026-11-03", "due": "2026-11-03", "status": "overdue" } },
+        { "name": "dates, the newer date replaces the open one", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] }, "completions": [], "today": "2026-11-11",
+          "expect": { "occurrence": "2026-11-10", "due": "2026-11-10", "status": "overdue" } },
+        { "name": "dates, done: next one", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] },
+          "completions": [{ "occurrence": "2026-11-10", "done_on": "2026-11-11", "type": "done" }], "today": "2026-11-11",
+          "expect": { "occurrence": "2026-11-17", "due": "2026-11-17", "status": "upcoming", "last_done": "2026-11-11" } },
+        { "name": "dates, done in advance", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] },
+          "completions": [{ "occurrence": "2026-11-03", "done_on": "2026-11-01", "type": "done" }], "today": "2026-11-01",
+          "expect": { "occurrence": "2026-11-10", "due": "2026-11-10", "status": "upcoming" } },
+        { "name": "dates, the last one done: finished", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] },
+          "completions": [{ "occurrence": "2026-11-17", "done_on": "2026-11-17", "type": "done" }], "today": "2026-11-20",
+          "expect": { "occurrence": null, "due": null, "status": "finished", "last_done": "2026-11-17" } },
+        { "name": "dates, the last one not done stays overdue", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] }, "completions": [], "today": "2026-11-30",
+          "expect": { "occurrence": "2026-11-17", "due": "2026-11-17", "status": "overdue" } },
+        { "name": "dates, paused", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"], "paused_until": "2026-11-12" }, "completions": [], "today": "2026-11-11",
+          "expect": { "occurrence": "2026-11-17", "due": "2026-11-17", "status": "upcoming" } },
+        { "name": "dates, postponed", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] },
+          "completions": [{ "occurrence": "2026-11-10", "done_on": "2026-11-10", "type": "postponed", "postponed_to": "2026-11-13" }], "today": "2026-11-11",
+          "expect": { "occurrence": "2026-11-10", "due": "2026-11-13", "status": "open" } },
+        { "name": "dates with a window", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"], "window_days": 2 }, "completions": [], "today": "2026-11-04",
+          "expect": { "occurrence": "2026-11-03", "due": "2026-11-05", "status": "open" } },
+        { "name": "dates, unsorted with duplicates", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-17", "2026-11-03", "2026-11-03"] }, "completions": [], "today": "2026-11-01",
+          "expect": { "occurrence": "2026-11-03", "due": "2026-11-03", "status": "upcoming" } },
+        { "name": "dates, none", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": [] }, "completions": [], "today": "2026-11-01",
+          "expect": { "occurrence": null, "due": null, "status": "finished" } }
     ],
     "occurrences": [
         { "name": "4th Monday of the month", "task": { "mode": "fixed", "rrule": "FREQ=MONTHLY;BYDAY=4MO", "starts_on": "2026-11-01" }, "from": "2026-11-01", "to": "2027-01-31",
@@ -82,11 +112,19 @@
         { "name": "every 2 weeks on Tuesday and Friday", "task": { "mode": "fixed", "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,FR", "starts_on": "2026-11-03" }, "from": "2026-11-01", "to": "2026-11-30",
           "expect": ["2026-11-03", "2026-11-06", "2026-11-17", "2026-11-20"] },
         { "name": "until the end date", "task": { "mode": "fixed", "rrule": "FREQ=DAILY;INTERVAL=10", "starts_on": "2026-11-01", "ends_on": "2026-11-21" }, "from": "2026-11-01", "to": "2026-12-31",
-          "expect": ["2026-11-01", "2026-11-11", "2026-11-21"] }
+          "expect": ["2026-11-01", "2026-11-11", "2026-11-21"] },
+        { "name": "dates", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] }, "from": "2026-11-04", "to": "2026-11-17",
+          "expect": ["2026-11-10", "2026-11-17"] }
     ],
     "missed": [
         { "name": "weekly", "task": { "mode": "fixed", "rrule": "FREQ=WEEKLY;BYDAY=MO", "starts_on": "2026-11-02" },
           "completions": [{ "occurrence": "2026-11-09", "done_on": "2026-11-09", "type": "done" }], "from": "2026-11-01", "today": "2026-11-24",
-          "expect": ["2026-11-02", "2026-11-16"] }
+          "expect": ["2026-11-02", "2026-11-16"] },
+        { "name": "dates", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] },
+          "completions": [{ "occurrence": "2026-11-03", "done_on": "2026-11-03", "type": "done" }], "from": "2026-11-01", "today": "2026-11-18",
+          "expect": ["2026-11-10"] },
+        { "name": "dates, finished", "task": { "mode": "dates", "rrule": null, "starts_on": "2026-11-03", "dates": ["2026-11-03", "2026-11-10", "2026-11-17"] },
+          "completions": [{ "occurrence": "2026-11-17", "done_on": "2026-11-17", "type": "done" }], "from": "2026-11-01", "today": "2026-11-20",
+          "expect": ["2026-11-03", "2026-11-10"] }
     ]
 }

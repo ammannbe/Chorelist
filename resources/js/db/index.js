@@ -18,7 +18,7 @@ const PULL_ONLY = ['activities'];
 // until the update is accepted: it pulls server fields it does not know yet and its checkpoint
 // moves past them. When a schema version adds fields the server already fills, increase the
 // collection's number here as well, so every client pulls the collection once more.
-const REPLICATION_RUNS = { lists: 2 };
+const REPLICATION_RUNS = { lists: 2, tasks: 2 };
 
 /**
  * Local database. Everything the UI shows is read from here, the

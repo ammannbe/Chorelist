@@ -2,6 +2,7 @@ import Alpine from 'alpinejs';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
+import { groupEvents, parseCalendar, suggestIcon } from './ical-import.js';
 import { createDatabase, removeDatabase, removeLocally, startReplication } from './db/index.js';
 import { compareBy, nextPosition, normalizeName, uuid7 } from './helpers.js';
 import { APP_NAME, hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
@@ -12,7 +13,7 @@ import { currentSubscription, pushPermission, pushSupported, subscribePush, unsu
 import { registerServiceWorker } from './pwa.js';
 import { periodRange, ranking, recommendations, SCORED, weeklyPoints } from './ranking.js';
 import {
-    addDays, daysBetween, describeSchedule, formatDate, fromSchedule, missed, nthLabel, occurrenceId, taskState, toSchedule, todayIn, upcoming, WEEKDAYS,
+    addDays, daysBetween, describeSchedule, formatDate, fromSchedule, MAX_DATES, missed, normalizeDates, nthLabel, occurrenceId, taskState, toSchedule, todayIn, upcoming, WEEKDAYS,
 } from './schedule.js';
 import { swipeRow } from './swipe.js';
 import { TEMPLATES, templateTask } from './templates.js';
@@ -189,6 +190,8 @@ Alpine.data('chorelist', () => ({
     // Import tasks from a template: { template, target (list id or 'new'), name, icon, starts_on, selected (titles) }.
     templateDialog: null,
     templates: TEMPLATES,
+    // Import of collection dates from a calendar file: { listId, error, skipped, futureOnly, rows: [{ key, selected, title, icon, dates, target ('new' or task id) }] }.
+    wasteDialog: null,
     absenceForm: { starts_on: '', ends_on: '', note: '' },
     historyFilter: { member: '', task: '', missed: true },
     statsPeriod: 'all',
@@ -403,7 +406,7 @@ Alpine.data('chorelist', () => ({
         }[state.status] ?? 'text-stone-500';
     },
     schedule(task) {
-        return describeSchedule(task, (key, replace) => this.$t(key, replace), Alpine.store('i18n').locale);
+        return describeSchedule(task, (key, replace) => this.$t(key, replace), Alpine.store('i18n').locale, this.today);
     },
     date(value, options) {
         return formatDate(value, Alpine.store('i18n').locale, options);
@@ -424,6 +427,7 @@ Alpine.data('chorelist', () => ({
             // Menu only: the swipe row keeps the frequent actions.
             { label: this.$t('History'), menuOnly: true, run: () => { location.hash = `#/history/${list.id}`; } },
             { label: this.$t('Statistics'), menuOnly: true, run: () => { location.hash = `#/stats/${list.id}`; } },
+            { label: this.$t('Import collection dates'), menuOnly: true, run: () => this.openWasteDialog(list.id) },
             ...(list.is_owner === false
                 // Members through a household leave the household instead.
                 ? (this.householdOf(list) ? [] : [{ label: this.$t('Leave list'), icon: 'leave', danger: true, online: true, run: () => this.leaveList(list.id) }])
@@ -577,6 +581,98 @@ Alpine.data('chorelist', () => ({
         this.$refs.templateDialog.close();
         location.hash = `#/list/${listId}`;
         Alpine.store('notice').show(tasks.length === 1 ? this.$t('1 task added.') : this.$t(':count tasks added.', { count: tasks.length }));
+    },
+
+    // ---- collection dates (waste calendars, resources/js/ical-import.js)
+
+    openWasteDialog(listId) {
+        this.$refs.listDialog?.close();
+        this.wasteDialog = { listId, error: null, skipped: 0, futureOnly: true, rows: [] };
+        this.$nextTick(() => this.$refs.wasteDialog.showModal());
+    },
+    /** Tasks of the list on specific dates: the dates of a calendar may be added to them. */
+    get wasteTargets() {
+        const listId = this.wasteDialog?.listId;
+
+        return this.visibleTasks.filter((task) => task.task_list_id === listId && task.mode === 'dates')
+            .sort((a, b) => a.title.localeCompare(b.title));
+    },
+    async readWasteFile(event) {
+        const dialog = this.wasteDialog;
+        const file = event.target.files?.[0];
+        if (!dialog || !file) return;
+        dialog.error = null;
+        dialog.rows = [];
+        try {
+            const { events, skipped } = parseCalendar(await file.text());
+            const groups = groupEvents(events);
+            if (!groups.length) {
+                dialog.error = this.$t('No collection dates found in this file. Pick a calendar file (.ics or .vcs).');
+                return;
+            }
+            const targets = this.wasteTargets;
+            dialog.skipped = skipped;
+            dialog.rows = groups.map((group, index) => ({
+                key: index,
+                selected: true,
+                title: group.title.slice(0, 255),
+                icon: suggestIcon(group.title),
+                dates: group.dates,
+                // A task with the same title gets the new dates.
+                target: targets.find((task) => task.title.trim().toLowerCase() === group.title.toLowerCase())?.id ?? 'new',
+            }));
+        } catch (error) {
+            console.error(error);
+            dialog.error = this.$t('The file could not be read.');
+        }
+    },
+    /** Dates of a row that are imported (only future ones if chosen). */
+    wasteDates(row) {
+        return this.wasteDialog.futureOnly ? row.dates.filter((date) => date >= this.today) : row.dates;
+    },
+    get wasteRows() {
+        return this.wasteDialog?.rows.filter((row) => row.selected && row.title.trim() && this.wasteDates(row).length) ?? [];
+    },
+
+    async importWaste() {
+        const dialog = this.wasteDialog;
+        const rows = this.wasteRows;
+        if (!rows.length) return;
+        let added = 0;
+        let updated = 0;
+        for (const row of rows) {
+            // Plain values: RxDB cannot clone Alpine's proxies.
+            const dates = [...this.wasteDates(row)];
+            const doc = row.target !== 'new' ? await db.tasks.findOne(row.target).exec() : null;
+            if (doc && doc.mode === 'dates') {
+                // Added to the existing dates (past ones stay, at most the latest MAX_DATES).
+                const merged = normalizeDates([...(doc.dates ?? []), ...dates]).slice(-MAX_DATES);
+                await doc.incrementalPatch({ dates: merged, starts_on: merged[0] });
+                updated++;
+                continue;
+            }
+            const kept = dates.slice(-MAX_DATES);
+            await this.insertTask({
+                task_list_id: dialog.listId,
+                title: row.title.trim().slice(0, 255),
+                icon: row.icon.trim() || null,
+                category: this.$t('Waste'),
+                points: 1,
+                mode: 'dates',
+                rrule: null,
+                starts_on: kept[0],
+                window_days: 0,
+                dates: kept,
+                reminders: [1],
+            });
+            added++;
+        }
+        this.$refs.wasteDialog.close();
+        location.hash = `#/list/${dialog.listId}`;
+        Alpine.store('notice').show([
+            added ? (added === 1 ? this.$t('1 task added.') : this.$t(':count tasks added.', { count: added })) : null,
+            updated ? (updated === 1 ? this.$t('1 task updated.') : this.$t(':count tasks updated.', { count: updated })) : null,
+        ].filter(Boolean).join(' '));
     },
 
     /** mode: 'edit' (name, icon, ranking, muting) or 'share' (members and invitations). */
@@ -736,14 +832,16 @@ Alpine.data('chorelist', () => ({
     /** Schedule of the form as task fields (for the preview and saving). */
     get formSchedule() {
         if (!this.form) return null;
-        const { mode, rrule } = toSchedule(this.form, this.form.starts_on || this.today);
+        const { mode, rrule, dates = null } = toSchedule(this.form, this.form.starts_on || this.today);
 
         return {
             mode,
             rrule,
-            starts_on: this.form.starts_on || this.today,
+            // Mode `dates`: the first date is the start date.
+            starts_on: dates?.[0] ?? (this.form.starts_on || this.today),
             window_days: mode === 'on_demand' ? 0 : Math.max(0, Number(this.form.window_days) || 0),
             ends_on: ['fixed', 'after_completion'].includes(mode) ? this.form.ends_on || null : null,
+            dates,
         };
     },
     get formPreview() {
@@ -775,6 +873,19 @@ Alpine.data('chorelist', () => ({
         return new Intl.DateTimeFormat(Alpine.store('i18n').locale.replace('_', '-'), { weekday: style, timeZone: 'UTC' })
             .format(new Date(Date.UTC(2024, 0, 1 + WEEKDAYS.indexOf(code))));
     },
+    addDate() {
+        const date = this.form.newDate;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return;
+        if (this.form.dates.length >= MAX_DATES) {
+            Alpine.store('notice').show(this.$t('At most :count dates.', { count: MAX_DATES }));
+            return;
+        }
+        this.form.dates = normalizeDates([...this.form.dates, date]);
+        this.form.newDate = '';
+    },
+    removeDate(date) {
+        this.form.dates = this.form.dates.filter((each) => each !== date);
+    },
     addStep() {
         const text = this.form.newStep.trim();
         if (!text) return;
@@ -791,6 +902,10 @@ Alpine.data('chorelist', () => ({
         form.task_list_id ||= this.lists[0]?.id ?? null;
         if (!title || !form.task_list_id) return;
         const schedule = this.formSchedule;
+        if (schedule.mode === 'dates' && !schedule.dates.length) {
+            Alpine.store('notice').show(this.$t('Add at least one date.'));
+            return;
+        }
         // Plain values: RxDB cannot clone Alpine's proxies (BroadcastChannel to other tabs).
         const fields = {
             title: title.slice(0, 255),
@@ -811,9 +926,13 @@ Alpine.data('chorelist', () => ({
                 // instead of being due at once without the old completions.
                 const old = doc.toJSON();
                 const start = this.stateOf(old).start;
-                const sameSchedule = ['mode', 'rrule', 'starts_on', 'window_days'].every((key) => (fields[key] ?? null) === (old[key] ?? null));
-                const startsOn = sameSchedule && start && start > fields.starts_on ? start : fields.starts_on;
-                const id = await this.insertTask({ ...old, ...fields, starts_on: startsOn, task_list_id: form.task_list_id });
+                const sameSchedule = ['mode', 'rrule', 'starts_on', 'window_days'].every((key) => (fields[key] ?? null) === (old[key] ?? null))
+                    && JSON.stringify(fields.dates ?? null) === JSON.stringify(old.dates ?? null);
+                const later = sameSchedule && start && start > fields.starts_on;
+                // Mode `dates`: the dates before the open one are left out instead.
+                const dates = later && fields.dates ? fields.dates.filter((date) => date >= start) : fields.dates;
+                const startsOn = later ? start : fields.starts_on;
+                const id = await this.insertTask({ ...old, ...fields, starts_on: startsOn, dates, task_list_id: form.task_list_id });
                 await doc.remove();
                 // Back to where the old task was opened, which shows the new one instead.
                 if (this.navStack.at(-2) === `#/task/${form.id}`) {
@@ -837,10 +956,11 @@ Alpine.data('chorelist', () => ({
 
     async insertTask(fields) {
         const id = uuid7();
-        const keys = ['task_list_id', 'title', 'notes', 'icon', 'category', 'points', 'mode', 'rrule', 'starts_on', 'window_days', 'ends_on', 'reminders', 'remind_after_days', 'paused_until', 'archived', 'checklist'];
+        const keys = ['task_list_id', 'title', 'notes', 'icon', 'category', 'points', 'mode', 'rrule', 'starts_on', 'window_days', 'ends_on', 'dates', 'reminders', 'remind_after_days', 'paused_until', 'archived', 'checklist'];
         await db.tasks.insert({
             ...Object.fromEntries(keys.map((key) => [key, fields[key] ?? null])),
             id,
+            dates: fields.mode === 'dates' ? [...(fields.dates ?? [])] : null,
             window_days: fields.window_days ?? 0,
             reminders: [...(fields.reminders ?? [])],
             checklist: (fields.checklist ?? []).map(({ id: stepId, text, done }) => ({ id: stepId, text, done: Boolean(done) })),
@@ -977,7 +1097,7 @@ Alpine.data('chorelist', () => ({
     openPostpone(task) {
         const state = this.stateOf(task);
         // Until the day before the next occurrence starts (only one occurrence is open at a time).
-        const next = task.mode === 'fixed' ? upcoming(task, this.completionsOf(task.id), this.today, 1)[0] : null;
+        const next = ['fixed', 'dates'].includes(task.mode) ? upcoming(task, this.completionsOf(task.id), this.today, 1)[0] : null;
         const min = state.due > this.today ? addDays(state.due, 1) : addDays(this.today, 1);
         const max = next ? addDays(next, -1) : '';
         // The next occurrence starts before the earliest possible day: nothing to postpone to.
@@ -1074,7 +1194,7 @@ Alpine.data('chorelist', () => ({
     changesText(changes = {}) {
         const labels = {
             name: this.$t('Name'), title: this.$t('Title'), icon: this.$t('Icon'), notes: this.$t('Notes'), category: this.$t('Category'),
-            points: this.$t('Points'), mode: this.$t('Repeat'), rrule: this.$t('Repeat'), starts_on: this.$t('First date'),
+            points: this.$t('Points'), mode: this.$t('Repeat'), rrule: this.$t('Repeat'), dates: this.$t('Dates'), starts_on: this.$t('First date'),
             window_days: this.$t('Time to do it'), ends_on: this.$t('End'), reminders: this.$t('Reminders'), remind_after_days: this.$t('Reminders'),
             paused_until: this.$t('Paused until'), archived: this.$t('Archived'), ranking_enabled: this.$t('Ranking'), ranking_period: this.$t('Ranking'),
         };
@@ -1085,7 +1205,7 @@ Alpine.data('chorelist', () => ({
             const label = labels[field] ?? field;
             if (shown.has(label)) return null;
             shown.add(label);
-            if (['notes', 'rrule', 'mode', 'reminders'].includes(field)) return label;
+            if (['notes', 'rrule', 'mode', 'reminders', 'dates'].includes(field)) return label;
             return `${label} ${plain(from)} → ${plain(to)}`;
         }).filter(Boolean).join(', ');
     },

@@ -248,3 +248,59 @@
         </form>
     </template>
 </dialog>
+
+{{-- Import collection dates (waste calendar) from an .ics/.vcs file into tasks on specific dates, on the device only --}}
+<dialog x-ref="wasteDialog" class="dialog" @close="wasteDialog = null">
+    <template x-if="wasteDialog">
+        <form @submit.prevent="importWaste()" class="space-y-4">
+            <h2 class="text-lg font-semibold" x-text="$t('Import collection dates')"></h2>
+            <p class="text-sm text-stone-600" x-text="$t('Download the collection calendar of your municipality as a calendar file (.ics or .vcs) and pick it here. Every type of waste becomes a task.')"></p>
+            <label class="block">
+                <span class="label" x-text="$t('Calendar file')"></span>
+                <input type="file" accept=".ics,.vcs,text/calendar,text/x-vcalendar" class="field w-full" @change="readWasteFile($event)">
+            </label>
+            <p x-show="wasteDialog.error" class="text-sm text-red-700" x-text="wasteDialog.error"></p>
+            <p x-show="wasteDialog.skipped" class="text-sm text-stone-500" x-text="$t('Repeating events that could not be read: :count (only their first date is used).', { count: wasteDialog.skipped })"></p>
+
+            <template x-if="wasteDialog.rows.length">
+                <div class="space-y-3">
+                    <label class="flex items-center gap-3">
+                        <input type="checkbox" class="size-4 accent-sky-700" x-model="wasteDialog.futureOnly">
+                        <span x-text="$t('Only future dates')"></span>
+                    </label>
+                    <ul class="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                        <template x-for="row in wasteDialog.rows" :key="row.key">
+                            <li class="space-y-2 px-3 py-3" :class="!row.selected && 'opacity-60'">
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" class="size-4 shrink-0 accent-sky-700" x-model="row.selected" :aria-label="$t('Import')">
+                                    <x-icon-picker model="row.icon" />
+                                    <input x-model="row.title" class="field min-w-0 flex-1" maxlength="255" :required="row.selected" :aria-label="$t('Title')">
+                                </div>
+                                <p class="text-xs text-stone-500" x-text="wasteDates(row).length
+                                    ? [wasteDates(row).length === 1 ? $t('1 date') : $t(':count dates', { count: wasteDates(row).length }),
+                                        `${date(wasteDates(row)[0], { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${date(wasteDates(row).at(-1), { day: '2-digit', month: '2-digit', year: 'numeric' })}`].join(' · ')
+                                    : $t('No future dates')"></p>
+                                <label class="block">
+                                    <span class="sr-only" x-text="$t('Add to')"></span>
+                                    <select x-model="row.target" class="field w-full py-1 text-sm">
+                                        <option value="new" x-text="$t('New task')" :selected="row.target === 'new'"></option>
+                                        <template x-for="task in wasteTargets" :key="task.id">
+                                            <option :value="task.id" x-text="$t('Add to “:task”', { task: `${task.icon ? `${task.icon} ` : ''}${task.title}` })" :selected="row.target === task.id"></option>
+                                        </template>
+                                    </select>
+                                </label>
+                            </li>
+                        </template>
+                    </ul>
+                    <p class="text-xs text-stone-500" x-text="$t('New tasks: 1 point, reminder a day before. You can change everything afterwards.')"></p>
+                </div>
+            </template>
+
+            <p class="text-xs text-stone-500" x-text="$t('No calendar file? Create a task with the schedule “On specific dates” and enter the dates.')"></p>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" class="button-secondary" @click="$refs.wasteDialog.close()" x-text="$t('Cancel')"></button>
+                <button class="button" :disabled="!wasteRows.length" x-text="$t('Import')"></button>
+            </div>
+        </form>
+    </template>
+</dialog>

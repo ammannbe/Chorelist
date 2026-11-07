@@ -41,6 +41,9 @@ class TaskResource extends SyncResource
             'starts_on' => [$required, 'nullable', 'date_format:Y-m-d'],
             'window_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'ends_on' => ['nullable', 'date_format:Y-m-d'],
+            // Mode `dates` (normalized in attributes()).
+            'dates' => ['nullable', 'array', 'max:'.Schedule::MAX_DATES, 'required_if:*.newDocumentState.mode,dates'],
+            'dates.*' => ['date_format:Y-m-d'],
             'reminders' => ['nullable', 'array', 'max:5'],
             'reminders.*' => ['integer', 'min:0', 'max:60'],
             'remind_after_days' => ['nullable', 'integer', 'min:1', 'max:365'],
@@ -71,6 +74,7 @@ class TaskResource extends SyncResource
             'starts_on' => $model->starts_on->format('Y-m-d'),
             'window_days' => $model->window_days,
             'ends_on' => $model->ends_on?->format('Y-m-d'),
+            'dates' => $model->dates,
             'reminders' => $model->reminders ?? [],
             'remind_after_days' => $model->remind_after_days,
             'paused_until' => $model->paused_until?->format('Y-m-d'),
@@ -127,8 +131,11 @@ class TaskResource extends SyncResource
         $task->fill($this->attributes($new));
         $changes = collect($task->getDirty())
             ->only(Task::TRACKED)
-            ->map(fn ($value, $field) => [self::plain($task->getOriginal($field)), self::plain($task->{$field})])
-            ->reject(fn (array $change) => $change[0] == $change[1])
+            // Dates only as their number: the whole lists would bloat the history.
+            ->map(fn ($value, $field) => $field === 'dates'
+                ? [count($task->getOriginal($field) ?? []), count($task->dates ?? [])]
+                : [self::plain($task->getOriginal($field)), self::plain($task->{$field})])
+            ->reject(fn (array $change, string $field) => $field !== 'dates' && $change[0] == $change[1])
             ->all();
         $task->save();
 
@@ -162,6 +169,8 @@ class TaskResource extends SyncResource
         $rrule = in_array($mode, ['fixed', 'after_completion'], true) && Schedule::validRule($doc['rrule'] ?? null)
             ? $doc['rrule']
             : ($mode === 'fixed' || $mode === 'after_completion' ? 'FREQ=WEEKLY' : null);
+        // Mode `dates`: the first date is the start date (as on the client).
+        $dates = $mode === 'dates' ? Schedule::normalizeDates($doc['dates'] ?? []) : null;
 
         return [
             'title' => $doc['title'],
@@ -171,9 +180,10 @@ class TaskResource extends SyncResource
             'points' => (int) ($doc['points'] ?? 1),
             'mode' => $mode,
             'rrule' => $rrule,
-            'starts_on' => $doc['starts_on'],
+            'starts_on' => $dates[0] ?? $doc['starts_on'],
             'window_days' => (int) ($doc['window_days'] ?? 0),
-            'ends_on' => $doc['ends_on'] ?? null,
+            'ends_on' => $mode === 'dates' ? null : $doc['ends_on'] ?? null,
+            'dates' => $dates,
             'reminders' => array_values(array_unique(array_map('intval', $doc['reminders'] ?? []))),
             'remind_after_days' => $doc['remind_after_days'] ?? null,
             'paused_until' => $doc['paused_until'] ?? null,
