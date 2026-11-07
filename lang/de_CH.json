@@ -793,5 +793,7 @@
     "Your account is connected to :provider and has no password. Sign in with :provider instead.": "Dein Konto ist mit :provider verbunden und hat kein Passwort. Melde dich stattdessen mit :provider an.",
     "If you did not ask for this, you can ignore this e-mail.": "Falls du das nicht warst, kannst du diese E-Mail ignorieren.",
     "Deleting the account needs a confirmation with :provider, which is turned off at the moment.": "Zum Löschen des Kontos musst du mit :provider bestätigen, was im Moment ausgeschaltet ist.",
-    "Name and deleting the account": "Name und Konto löschen"
+    "Name and deleting the account": "Name und Konto löschen",
+    "Your access to :app is suspended.": "Dein Zugang zu :app ist gesperrt.",
+    "Your access to :app is not enabled.": "Dein Zugang zu :app ist nicht freigeschaltet."
 }

@@ -93,6 +93,31 @@ Same architecture as Shoppinglist:
 - Deleting the account: in mirrored households the user only leaves (no hand-over, the AccountManager decides).
 - UI texts name the AccountManager ("Manage households in “:name”", "Only in this app, not managed in “:name”." …): `App\Households\AccountManagerLabel::get()` = `ACCOUNT_MANAGER_LABEL`, otherwise the `name` (its `APP_NAME`) from the public `ACCOUNT_MANAGER_URL/api/info` (only asked with the account-manager driver; cached a day, a failure 10 minutes), otherwise "Account" («Konto»). The link goes to `AccountManagerHouseholds::portalUrl()` (`households_url` of `/api/info`, otherwise `ACCOUNT_MANAGER_URL/households`). Tests: `AccountManagerLabelTest`.
 
+## Entitlements from the AccountManager
+
+- Contract: AccountManager `docs/ENTITLEMENTS-API.md` (phase 6a), concept 5.3/6. Same design and names as RecipeManager
+  (reference, its `AGENTS.md`) and Shoppinglist (same Fortify/PWA implementation). `config/entitlements.php`: `driver`
+  (`ENTITLEMENTS_DRIVER`, `local` default), `admin_source` (`AUTH_ADMIN_SOURCE`, `local` default), `local.features`
+  (`ENTITLEMENTS_LOCAL_FEATURES`, empty: no feature is gated yet); uses the `ACCOUNT_MANAGER_*` values, the client
+  (`AccountManagerClient::entitlements()`, `GET /api/entitlements/{sub}`, 404 = no access) and the webhook of the households.
+- `App\Entitlements\Entitlements` (static): `has($user, 'key')`, `features()`, `isAdmin()`, `status()`, `allowsAccess()`.
+  Linked users (`oidc_sub`) get the stored snapshot with the account-manager driver, unlinked users the local behaviour.
+  Admin: the app has no admin features; `isAdmin()` is prepared (emergency addresses = admins, `AUTH_ADMIN_SOURCE=
+  account-manager`: the snapshot's flag for linked users) and unused.
+- Storage `user_entitlements` (user_id unique, status, admin, features JSON, version, synced_at), dropped when `oidc_sub`
+  changes; `App\Entitlements\AccountManagerEntitlements`: webhooks apply only `version > stored`, API answers also `=`, 404 sets
+  `none` (version kept), unknown subjects are ignored (the OIDC login fetches the snapshot, 5 s, failures keep the last state),
+  `entitlements:sync` daily 04:30. The webhook is open with mirrored households or synced entitlements; `entitlements.changed`
+  is applied right away, `user.deleted` queued (`DeleteAccountManagerUser`).
+- Access (driver account-manager): `EnsureEntitlementAccess` (web group) blocks linked users with status `suspended`,
+  `requested` or `none`: JSON requests get 403 `{message, access}` (session kept), pages sign out with «Dein Zugang zu :app ist
+  gesperrt.» / «… ist nicht freigeschaltet.» on the login page; the PWA sets the sync status `blocked`, shows the message and
+  stops syncing (local data stays). The OIDC callback refuses blocked users.
+- `user.deleted` = `App\Services\UserDeletion`, the same code as deleting the account on the account page
+  (`AccountController`): own lists deleted for all members, shared ones left, households left with hand-over (mirrored: only
+  leaving), sessions (database driver), then the user. Removing the access is no deletion (`status: none`).
+- Tests: `AccountManagerEntitlementsTest`.
+
 ## Notifications
 
 - Kinds (`PreferenceController::NOTIFICATIONS`): reminder, overdue, completed, task_changed, list_shared, weekly_summary. Channels per kind: push and/or mail (`users.preferences.notifications`). Muted lists notify nothing.
@@ -133,6 +158,7 @@ Deployment: `.forgejo/workflows/deploy.yml` (same as Shoppinglist, default URL `
 - Local data: `ddev artisan migrate:fresh --seed` (test@example.com and anna@example.com, password `password`, a shared list with chores). Mails: Mailpit (`ddev launch -m`).
 - Reminders: `ddev artisan reminders:send --dry-run`.
 - Households from the AccountManager: `ddev artisan households:sync`, `ddev artisan households:import [--check]`.
+- Entitlements from the AccountManager: `ddev artisan entitlements:sync`.
 
 ## Rules
 

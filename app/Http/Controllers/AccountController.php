@@ -4,23 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Auth\OidcAccount;
 use App\Auth\OidcLabel;
-use App\Models\Household;
-use App\Models\TaskList;
 use App\Models\User;
+use App\Services\UserDeletion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 class AccountController extends Controller
 {
     /**
-     * Deletes the account: own lists are deleted for all members, shared ones are left.
-     * Completions in other lists stay (without the user), so their ranking keeps its history.
+     * Deletes the account (App\Services\UserDeletion, also used for user.deleted of the AccountManager).
      * Confirmed with the password, a linked account (no password) with an OIDC login within
      * OidcAccount::SIGN_IN_TIMEOUT (confirmation at the provider from the account page).
      */
-    public function destroy(Request $request, OidcAccount $accounts): RedirectResponse
+    public function destroy(Request $request, OidcAccount $accounts, UserDeletion $deletion): RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -40,16 +37,7 @@ class AccountController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        DB::transaction(function () use ($user) {
-            // Another member takes over as admin, empty households are deleted (mirrored ones: the AccountManager decides).
-            $user->households()->get()->each(fn (Household $household) => $household->removeUser($user, handOver: ! $household->isMirrored()));
-            TaskList::where('owner_id', $user->id)->get()->each(function (TaskList $list) {
-                $list->delete();
-                $list->touchForMembers();
-            });
-            $user->memberships()->get()->each(fn ($membership) => $membership->taskList->removeMember($user));
-            $user->delete();
-        });
+        $deletion->delete($user);
 
         return redirect('/?deleted=1');
     }
