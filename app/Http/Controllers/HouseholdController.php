@@ -12,7 +12,7 @@ use Illuminate\Validation\Rule;
 /**
  * Households page (server rendered, needs a connection): create, rename and delete households,
  * change roles, remove members and leave. Admins manage the household, members may leave it.
- * Read only with HOUSEHOLDS_DRIVER=konto: households are managed in the AccountManager and mirrored.
+ * Read only with HOUSEHOLDS_DRIVER=account-manager: households are managed in the AccountManager and mirrored.
  */
 class HouseholdController extends Controller
 {
@@ -28,7 +28,7 @@ class HouseholdController extends Controller
                 ->get(),
             'invitations' => $user->householdInvitations()->with(['household', 'inviter'])->get(),
             'local' => Household::managedLocally(),
-            'kontoUrl' => filled(config('households.konto.url')) ? rtrim((string) config('households.konto.url'), '/').'/households' : null,
+            'accountManagerUrl' => filled(config('households.account_manager.url')) ? rtrim((string) config('households.account_manager.url'), '/').'/households' : null,
         ]);
     }
 

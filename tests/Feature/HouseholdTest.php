@@ -393,12 +393,12 @@ class HouseholdTest extends TestCase
         Notification::assertNothingSent();
     }
 
-    public function test_the_konto_driver_makes_local_management_read_only(): void
+    public function test_the_account_manager_driver_makes_local_management_read_only(): void
     {
         Notification::fake();
         [$owner, $member, , $household, $listId] = $this->shared();
         [, $token] = HouseholdInvitation::issue($household, $owner, 'neu@example.com', Household::MEMBER);
-        config(['households.driver' => 'konto']);
+        config(['households.driver' => 'account-manager']);
 
         $this->actingAs($owner)->post('/households', ['name' => 'Neu'])->assertForbidden();
         $this->actingAs($owner)->put("/households/{$household->uuid}", ['name' => 'Neu'])->assertForbidden();

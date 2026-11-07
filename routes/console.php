@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\KontoWebhookEvent;
+use App\Models\AccountManagerWebhookEvent;
 use Illuminate\Support\Facades\Schedule;
 
 // Production runs two cron jobs every minute (see README):
@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('reminders:send')->everyFiveMinutes()->withoutOverlapping();
 
-// HOUSEHOLDS_DRIVER=konto: fallback for lost webhooks, and the state of proposed local households.
+// HOUSEHOLDS_DRIVER=account-manager: fallback for lost webhooks, and the state of proposed local households.
 Schedule::command('households:sync')->dailyAt('04:15')->withoutOverlapping();
 Schedule::command('households:import --check')->hourly()->withoutOverlapping();
-Schedule::command('model:prune', ['--model' => [KontoWebhookEvent::class]])->daily();
+Schedule::command('model:prune', ['--model' => [AccountManagerWebhookEvent::class]])->daily();

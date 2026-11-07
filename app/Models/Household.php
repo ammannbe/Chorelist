@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
  * reminders work as for individual members: every change of the members or shares calls
  * TaskList::syncHouseholdMembers().
  */
-#[Fillable(['name', 'created_by', 'konto_household_uuid'])]
+#[Fillable(['name', 'created_by', 'account_manager_household_uuid'])]
 class Household extends Model
 {
     public const ADMIN = 'admin';
@@ -39,7 +39,7 @@ class Household extends Model
     protected function casts(): array
     {
         return [
-            'konto_version' => 'integer',
+            'account_manager_version' => 'integer',
         ];
     }
 
@@ -57,12 +57,12 @@ class Household extends Model
     }
 
     /**
-     * Mirrored from the AccountManager (HOUSEHOLDS_DRIVER=konto): name and members come from there.
+     * Mirrored from the AccountManager (HOUSEHOLDS_DRIVER=account-manager): name and members come from there.
      * After switching back to "local" mirrored households are ordinary local ones.
      */
     public function isMirrored(): bool
     {
-        return $this->konto_household_uuid !== null && ! self::managedLocally();
+        return $this->account_manager_household_uuid !== null && ! self::managedLocally();
     }
 
     public function creator(): BelongsTo

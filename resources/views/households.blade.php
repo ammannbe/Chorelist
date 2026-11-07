@@ -4,8 +4,8 @@
     @unless ($local)
         <p class="notice mb-6">
             {{ __('Households are managed in your account. Here you only see them.') }}
-            @if ($kontoUrl)
-                <a class="underline" href="{{ $kontoUrl }}">{{ __('Manage households in your account') }}</a>
+            @if ($accountManagerUrl)
+                <a class="underline" href="{{ $accountManagerUrl }}">{{ __('Manage households in your account') }}</a>
             @endif
         </p>
     @endunless
@@ -42,12 +42,12 @@
         <section class="mb-10 space-y-4" id="household-{{ $household->uuid }}">
             <h2 class="text-lg font-semibold">🏠 {{ $household->name }}</h2>
 
-            @if (! $local && $household->konto_household_uuid === null)
+            @if (! $local && $household->account_manager_household_uuid === null)
                 <p class="text-sm text-stone-500">
                     {{ __('Only in this app, not managed in your account.') }}
-                    @if ($household->konto_import_status === 'pending')
+                    @if ($household->account_manager_import_status === 'pending')
                         {{ __('Proposed for your account, waiting for confirmation.') }}
-                    @elseif ($household->konto_import_status === 'rejected')
+                    @elseif ($household->account_manager_import_status === 'rejected')
                         {{ __('Not taken over into your account.') }}
                     @endif
                 </p>

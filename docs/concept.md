@@ -19,7 +19,7 @@ Stand: 1. November 2026. Ämtli-App wie die «Aufgaben» von Flatastic, ohne Ein
 
 ## Funktionen
 
-- Mehrere Listen pro Person, teilen per E-Mail oder Einladungslink (7 Tage gültig) oder mit einem Haushalt (alle Mitglieder, auch spätere). Haushalte verwaltet die App selbst (`HOUSEHOLDS_DRIVER=local`) oder sie kommen aus dem AccountManager (`konto`: Webhooks und täglicher Abgleich, Mitglieder über `oidc_sub`, Umstieg per `households:import`; siehe AccountManager-Konzept 5.6 und `docs/HOUSEHOLDS-API.md` dort).
+- Mehrere Listen pro Person, teilen per E-Mail oder Einladungslink (7 Tage gültig) oder mit einem Haushalt (alle Mitglieder, auch spätere). Haushalte verwaltet die App selbst (`HOUSEHOLDS_DRIVER=local`) oder sie kommen aus dem AccountManager (`account-manager`: Webhooks und täglicher Abgleich, Mitglieder über `oidc_sub`, Umstieg per `households:import`; siehe AccountManager-Konzept 5.6 und `docs/HOUSEHOLDS-API.md` dort).
 - Aufgabe: Titel, Emoji, Kategorie, Punkte 1–5, Notizen, Schritte (Checkliste), Termin:
   - einmalig, täglich, wöchentlich an Wochentagen, monatlich (Tag X, «4. Montag», letzter Tag), jährlich, jeweils «alle N»
   - «X Tage/Wochen nach dem letzten Mal» (wie Flatastic)
